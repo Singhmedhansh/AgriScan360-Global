@@ -20,3 +20,6 @@ __MACOSX/
 *.log
 *.sqlite3
 .ipynb_checkpoints/
+data/
+plant_dataset/
+outputs/
