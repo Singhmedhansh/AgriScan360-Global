@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgriScan 360 — Plant Diagnostics</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f3f0;
+      --surface: #ffffff;
+      --surface-2: #f9f8f6;
+      --border: #e4e2dc;
+      --border-strong: #ccc9c0;
+      --text-primary: #1c1c1a;
+      --text-secondary: #5a5a54;
+      --text-muted: #9a9990;
+      --accent-green: #2d6a4f;
+      --accent-green-light: #d8f3dc;
+      --accent-amber: #b45309;
+      --accent-amber-light: #fef3c7;
+      --accent-red: #991b1b;
+      --accent-red-light: #fee2e2;
+      --accent-blue: #1d4ed8;
+      --accent-blue-light: #dbeafe;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Geist', sans-serif;
+      background-color: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Shimmer animation */
+    @keyframes shimmer {
+      0% { background-position: -600px 0; }
+      100% { background-position: 600px 0; }
+    }
+    .shimmer-overlay {
+      background: linear-gradient(
+        90deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.55) 40%,
+        rgba(255,255,255,0.75) 50%,
+        rgba(255,255,255,0.55) 60%,
+        rgba(255,255,255,0) 100%
+      );
+      background-size: 600px 100%;
+      animation: shimmer 1.6s infinite linear;
+    }
+
+    /* Progress bar fill animation */
+    @keyframes fillBar {
+      from { width: 0%; }
+      to { width: var(--target-width); }
+    }
+    .progress-fill {
+      animation: fillBar 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s both;
+    }
+
+    /* Fade in cards */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.5s ease both; }
+    .fade-up-1 { animation-delay: 0.05s; }
+    .fade-up-2 { animation-delay: 0.1s; }
+    .fade-up-3 { animation-delay: 0.15s; }
+    .fade-up-4 { animation-delay: 0.2s; }
+    .fade-up-5 { animation-delay: 0.25s; }
+
+    /* Drag hover */
+    .upload-zone:hover, .upload-zone.dragging {
+      border-color: var(--accent-green) !important;
+      background: #f0faf3 !important;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+    /* Mono text */
+    .mono { font-family: 'DM Mono', monospace; }
+
+    /* Lab report serif accent */
+    .serif { font-family: 'Fraunces', serif; }
+
+    /* Badge pulse */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+    /* Dotted lab grid background on upload area */
+    .lab-grid {
+      background-image: radial-gradient(circle, #d0cdc6 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    /* Section divider line */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Processing overlay */
+    #processingOverlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(2px);
+      z-index: 10;
+      border-radius: 10px;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #processingOverlay.active { display: flex; }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     TOP NAVIGATION
+═══════════════════════════════════════════ -->
+<nav style="background:var(--surface); border-bottom: 1px solid var(--border);" class="sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+
+    <!-- Logo -->
+    <div class="flex items-center gap-3">
+      <div style="background:var(--accent-green); border-radius:8px;" class="w-8 h-8 flex items-center justify-center">
+        <i data-lucide="scan-line" style="color:#fff; width:17px; height:17px;"></i>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="serif font-medium text-lg" style="color:var(--text-primary); letter-spacing:-0.02em;">AgriScan 360</span>
+        <span class="mono text-xs px-2 py-0.5 rounded-full font-medium" style="background: var(--accent-green); color:#fff; letter-spacing:0.05em;">PRO</span>
+      </div>
+    </div>
+
+    <!-- Center: specimen ID -->
+    <div class="hidden md:flex items-center gap-2 mono text-xs" style="color:var(--text-muted);">
+      <span>SPECIMEN</span>
+      <span style="color: var(--text-secondary);" class="font-medium">SPC-20240315-0042</span>
+      <span style="width:5px;height:5px;border-radius:50%;background:var(--accent-green);" class="pulse-dot inline-block"></span>
+      <span style="color:var(--accent-green);">LIVE</span>
+    </div>
+
+    <!-- Right: actions -->
+    <div class="flex items-center gap-2">
+      <button class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-all" style="color:var(--text-secondary); border:1px solid var(--border);" onmouseover="this.style.borderColor='var(--border-strong)'" onmouseout="this.style.borderColor='var(--border)'">
+        <i data-lucide="download" style="width:14px;height:14px;"></i>
+        <span>Export PDF</span>
+      </button>
+      <button class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-all" style="color:var(--text-secondary); border:1px solid var(--border);" onmouseover="this.style.borderColor='var(--border-strong)'" onmouseout="this.style.borderColor='var(--border)'">
+        <i data-lucide="share-2" style="width:14px;height:14px;"></i>
+        <span>Share</span>
+      </button>
+      <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold mono" style="background:var(--accent-green-light); color:var(--accent-green);">DR</div>
+    </div>
+  </div>
+</nav>
+
+
+<!-- ═══════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════ -->
+<main class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- Page header -->
+  <div class="mb-8 fade-up">
+    <div class="flex items-center gap-2 mono text-xs mb-2" style="color:var(--text-muted);">
+      <i data-lucide="flask-conical" style="width:12px;height:12px;"></i>
+      <span>PLANT PATHOLOGY DIAGNOSTICS — LAB REPORT v2.4</span>
+    </div>
+    <h1 class="serif text-3xl font-medium" style="color:var(--text-primary); letter-spacing:-0.03em;">Disease Analysis Report</h1>
+    <p class="text-sm mt-1" style="color:var(--text-secondary);">Upload a leaf specimen to receive AI-powered phytopathological analysis</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ──────────────────────────────────────
+         LEFT COLUMN: Upload + Image Preview
+    ────────────────────────────────────────── -->
+    <div class="lg:col-span-2 flex flex-col gap-6">
+
+      <!-- Upload Zone -->
+      <div class="fade-up fade-up-1 rounded-xl p-6" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="font-semibold text-sm" style="color:var(--text-primary);">Specimen Upload</h2>
+            <p class="text-xs mt-0.5" style="color:var(--text-muted);">JPEG, PNG, WebP — max 25 MB per image</p>
+          </div>
+          <span class="mono text-xs px-2 py-1 rounded-md" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">STEP 01</span>
+        </div>
+
+        <!-- Drop zone -->
+        <div
+          id="uploadZone"
+          class="upload-zone lab-grid relative rounded-xl cursor-pointer transition-all"
+          style="border: 2px dashed var(--border-strong); min-height: 220px; display:flex; align-items:center; justify-content:center;"
+          onclick="document.getElementById('fileInput').click()"
+          ondragover="handleDragOver(event)"
+          ondragleave="handleDragLeave(event)"
+          ondrop="handleDrop(event)"
+        >
+          <!-- Processing overlay -->
+          <div id="processingOverlay">
+            <div class="shimmer-overlay" style="position:absolute;inset:0;border-radius:10px;"></div>
+            <div style="position:relative;z-index:2;text-align:center;">
+              <div class="spinner mx-auto mb-3"></div>
+              <p class="text-sm font-medium" style="color:var(--text-secondary);">Analyzing specimen…</p>
+              <p class="mono text-xs mt-1" style="color:var(--text-muted);">Running neural classification</p>
+            </div>
+          </div>
+
+          <!-- Default state -->
+          <div id="uploadDefault" class="flex flex-col items-center gap-3 py-8 px-4 text-center">
+            <div class="w-14 h-14 rounded-full flex items-center justify-center" style="background:var(--accent-green-light);">
+              <i data-lucide="upload-cloud" style="width:24px;height:24px;color:var(--accent-green);"></i>
+            </div>
+            <div>
+              <p class="font-medium text-sm" style="color:var(--text-primary);">Drag &amp; drop leaf specimen here</p>
+              <p class="text-xs mt-1" style="color:var(--text-muted);">or click to browse your files</p>
+            </div>
+            <div class="flex items-center gap-4 mt-2">
+              <div class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
+                <i data-lucide="image" style="width:12px;height:12px;"></i>
+                <span>High-res preferred</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
+                <i data-lucide="sun" style="width:12px;height:12px;"></i>
+                <span>Good lighting</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
+                <i data-lucide="focus" style="width:12px;height:12px;"></i>
+                <span>Sharp focus</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Uploaded image preview state (hidden by default) -->
+          <div id="uploadPreview" class="w-full h-full hidden" style="padding:12px;">
+            <img id="previewImg" src="" alt="Specimen preview" style="width:100%;max-height:300px;object-fit:contain;border-radius:8px;" />
+            <button onclick="clearImage(event)" class="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center transition-all" style="background:rgba(28,28,26,0.7); color:#fff;" title="Remove">
+              <i data-lucide="x" style="width:13px;height:13px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)" />
+
+        <div class="flex items-center gap-2 mt-4">
+          <button onclick="simulateAnalysis()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
+            <i data-lucide="cpu" style="width:14px;height:14px;"></i>
+            Run Diagnostics
+          </button>
+          <p class="text-xs" style="color:var(--text-muted);">Uses 1 analysis credit</p>
+        </div>
+      </div>
+
+      <!-- Diagnosis Result Card -->
+      <div id="diagnosisCard" class="fade-up fade-up-2 rounded-xl" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
+        <!-- Card header -->
+        <div class="flex items-start justify-between px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background:var(--accent-amber-light);">
+              <i data-lucide="microscope" style="width:18px;height:18px;color:var(--accent-amber);"></i>
+            </div>
+            <div>
+              <p class="mono text-xs mb-1" style="color:var(--text-muted);">DIAGNOSIS RESULT</p>
+              <h2 class="serif text-xl font-medium" style="color:var(--text-primary); letter-spacing:-0.02em;">{{ disease_name }}</h2>
+              <p class="text-xs mt-0.5" style="color:var(--text-secondary);"><span class="italic">Alternaria solani</span> — Fungal Pathogen Class III</p>
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-1.5">
+            <span class="mono text-xs px-2.5 py-1 rounded-full font-medium" style="background:var(--accent-amber-light); color:var(--accent-amber);">MODERATE</span>
+            <span class="mono text-xs" style="color:var(--text-muted);">2024-03-15 · 09:42 UTC</span>
+          </div>
+        </div>
+
+        <!-- Specimen details grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y" style="border-bottom:1px solid var(--border); --tw-divide-color: var(--border);">
+          <div class="px-5 py-4">
+            <p class="mono text-xs mb-1" style="color:var(--text-muted);">HOST PLANT</p>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">Solanum lycopersicum</p>
+            <p class="text-xs" style="color:var(--text-secondary);">Tomato</p>
+          </div>
+          <div class="px-5 py-4">
+            <p class="mono text-xs mb-1" style="color:var(--text-muted);">GROWTH STAGE</p>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">Vegetative</p>
+            <p class="text-xs" style="color:var(--text-secondary);">V6 — 6-leaf stage</p>
+          </div>
+          <div class="px-5 py-4">
+            <p class="mono text-xs mb-1" style="color:var(--text-muted);">AFFECTED AREA</p>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">Upper canopy</p>
+            <p class="text-xs" style="color:var(--text-secondary);">Adaxial surface</p>
+          </div>
+          <div class="px-5 py-4">
+            <p class="mono text-xs mb-1" style="color:var(--text-muted);">LESION COUNT</p>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">12 detected</p>
+            <p class="text-xs" style="color:var(--text-secondary);">~4mm avg diameter</p>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="px-6 py-5">
+          <p class="text-sm leading-relaxed" style="color:var(--text-secondary);">
+            Early Blight is a common foliar disease caused by <span class="italic">Alternaria solani</span>, characterized by concentric ring lesions with a target-like appearance on older leaves first, progressing upward. The pathogen overwinters in soil and infected plant debris, spreading through wind and rain splash. Current infection presents at <span class="font-medium" style="color:var(--text-primary);">Stage II — Moderate</span>, requiring prompt intervention to prevent yield loss exceeding 15%.
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Plan -->
+      <div id="actionPlan" class="fade-up fade-up-3 rounded-xl" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="px-6 pt-5 pb-4 flex items-center justify-between" style="border-bottom:1px solid var(--border);">
+          <div>
+            <p class="mono text-xs mb-1" style="color:var(--text-muted);">TREATMENT PROTOCOL</p>
+            <h2 class="font-semibold text-base" style="color:var(--text-primary);">Action Plan</h2>
+          </div>
+          <span class="mono text-xs px-2.5 py-1 rounded-full" style="background:var(--accent-blue-light); color:var(--accent-blue);">3 SECTIONS</span>
+        </div>
+
+        <div class="divide-y" style="--tw-divide-opacity:1;">
+
+          <!-- Immediate Actions -->
+          <div class="px-6 py-5">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style="background:#fee2e2;">
+                <i data-lucide="zap" style="width:13px;height:13px;color:#dc2626;"></i>
+              </div>
+              <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Immediate</h3>
+              <span class="mono text-xs px-2 py-0.5 rounded" style="background:#fee2e2;color:#dc2626;">URGENT · 0–24 HRS</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <label class="flex items-start gap-3 cursor-pointer group">
+                <input type="checkbox" class="mt-0.5 rounded" style="accent-color:var(--accent-green); width:15px;height:15px;flex-shrink:0;" />
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Remove and destroy infected foliage</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Bag and dispose of all visibly infected leaves. Do not compost.</p>
+                </div>
+              </label>
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" class="mt-0.5 rounded" style="accent-color:var(--accent-green); width:15px;height:15px;flex-shrink:0;" />
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Isolate affected plants from healthy stock</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Maintain 1.5m separation. Mark with field flags for monitoring.</p>
+                </div>
+              </label>
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" class="mt-0.5 rounded" style="accent-color:var(--accent-green); width:15px;height:15px;flex-shrink:0;" />
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Improve canopy airflow</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Prune for 20–30% canopy openness to reduce humidity-driven spread.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Chemical Treatment -->
+          <div class="px-6 py-5" style="border-top:1px solid var(--border);">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style="background:var(--accent-amber-light);">
+                <i data-lucide="flask-conical" style="width:13px;height:13px;color:var(--accent-amber);"></i>
+              </div>
+              <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Chemical Treatment</h3>
+              <span class="mono text-xs px-2 py-0.5 rounded" style="background:var(--accent-amber-light);color:var(--accent-amber);">1–3 DAYS</span>
+            </div>
+
+            <div class="rounded-lg overflow-hidden" style="border:1px solid var(--border);">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                    <th class="text-left px-4 py-2.5 mono text-xs font-medium" style="color:var(--text-muted);">FUNGICIDE</th>
+                    <th class="text-left px-4 py-2.5 mono text-xs font-medium" style="color:var(--text-muted);">RATE</th>
+                    <th class="text-left px-4 py-2.5 mono text-xs font-medium" style="color:var(--text-muted);">INTERVAL</th>
+                    <th class="text-left px-4 py-2.5 mono text-xs font-medium" style="color:var(--text-muted);">PHI</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y" style="--tw-divide-color:var(--border);">
+                  <tr>
+                    <td class="px-4 py-3 font-medium" style="color:var(--text-primary);">Mancozeb 75 WP</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">2.5 kg/ha</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">7 days</td>
+                    <td class="px-4 py-3 mono text-xs" style="color:var(--accent-amber);">5 days</td>
+                  </tr>
+                  <tr style="background:var(--surface-2);">
+                    <td class="px-4 py-3 font-medium" style="color:var(--text-primary);">Chlorothalonil 720 SC</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">1.5 L/ha</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">10 days</td>
+                    <td class="px-4 py-3 mono text-xs" style="color:var(--accent-amber);">7 days</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3 font-medium" style="color:var(--text-primary);">Azoxystrobin 23 SC</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">1.0 L/ha</td>
+                    <td class="px-4 py-3" style="color:var(--text-secondary);">14 days</td>
+                    <td class="px-4 py-3 mono text-xs" style="color:var(--accent-green);">3 days</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-xs mt-3 flex items-center gap-1.5" style="color:var(--text-muted);">
+              <i data-lucide="info" style="width:11px;height:11px;"></i>
+              PHI = Pre-Harvest Interval. Rotate chemistries to prevent resistance development.
+            </p>
+          </div>
+
+          <!-- Prevention -->
+          <div class="px-6 py-5" style="border-top:1px solid var(--border);">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style="background:var(--accent-green-light);">
+                <i data-lucide="shield-check" style="width:13px;height:13px;color:var(--accent-green);"></i>
+              </div>
+              <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Prevention</h3>
+              <span class="mono text-xs px-2 py-0.5 rounded" style="background:var(--accent-green-light);color:var(--accent-green);">LONG-TERM</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <i data-lucide="rotate-ccw" style="width:14px;height:14px;color:var(--accent-green);flex-shrink:0;margin-top:2px;"></i>
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Crop Rotation</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">3–4 year rotation with non-solanaceous crops</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <i data-lucide="droplets" style="width:14px;height:14px;color:var(--accent-blue);flex-shrink:0;margin-top:2px;"></i>
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Drip Irrigation</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Avoid overhead watering to reduce leaf wetness</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <i data-lucide="dna" style="width:14px;height:14px;color:var(--accent-amber);flex-shrink:0;margin-top:2px;"></i>
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Resistant Varieties</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Plant certified EB-tolerant cultivars next season</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <i data-lucide="leaf" style="width:14px;height:14px;color:var(--accent-green);flex-shrink:0;margin-top:2px;"></i>
+                <div>
+                  <p class="text-sm font-medium" style="color:var(--text-primary);">Soil Amendment</p>
+                  <p class="text-xs mt-0.5" style="color:var(--text-muted);">Calcium-rich compost to improve tissue strength</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ──────────────────────────────────────
+         RIGHT SIDEBAR: Metrics
+    ────────────────────────────────────────── -->
+    <div class="flex flex-col gap-5">
+
+      <!-- Confidence Score -->
+      <div class="fade-up fade-up-3 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <i data-lucide="bar-chart-2" style="width:14px;height:14px;color:var(--accent-green);"></i>
+            <p class="mono text-xs font-medium" style="color:var(--text-muted);">CONFIDENCE</p>
+          </div>
+          <span class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ confidence_score }}</span>
+        </div>
+        <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:8px; border:1px solid var(--border);">
+          <div class="progress-fill h-full rounded-full" style="--target-width:98%; background:var(--accent-green); width:0%;"></div>
+        </div>
+        <div class="flex justify-between mt-2">
+          <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
+          <span class="mono text-xs" style="color:var(--accent-green);">Very High</span>
+          <span class="mono text-xs" style="color:var(--text-muted);">100%</span>
+        </div>
+        <p class="text-xs mt-3" style="color:var(--text-secondary);">Model trained on 2.4M annotated specimens across 186 species</p>
+      </div>
+
+      <!-- Severity -->
+      <div class="fade-up fade-up-4 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <i data-lucide="activity" style="width:14px;height:14px;color:var(--accent-amber);"></i>
+            <p class="mono text-xs font-medium" style="color:var(--text-muted);">SEVERITY INDEX</p>
+          </div>
+          <span class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ severity_pct }}</span>
+        </div>
+        <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:8px; border:1px solid var(--border);">
+          <div class="progress-fill h-full rounded-full" style="--target-width:12%; background:var(--accent-amber); width:0%;"></div>
+        </div>
+        <div class="flex justify-between mt-2">
+          <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
+          <span class="mono text-xs" style="color:var(--accent-amber);">Mild</span>
+          <span class="mono text-xs" style="color:var(--text-muted);">100%</span>
+        </div>
+
+        <!-- Severity scale -->
+        <div class="mt-4 rounded-lg overflow-hidden flex" style="height:6px;">
+          <div style="background:#22c55e; flex:1;"></div>
+          <div style="background:#84cc16; flex:1;"></div>
+          <div style="background:#eab308; flex:1;"></div>
+          <div style="background:#f97316; flex:1;"></div>
+          <div style="background:#ef4444; flex:1;"></div>
+        </div>
+        <div class="flex justify-between mt-1">
+          <span class="mono text-xs" style="color:var(--text-muted);">Trace</span>
+          <span class="mono text-xs" style="color:var(--text-muted);">Critical</span>
+        </div>
+
+        <div class="mt-4 flex items-center gap-2 rounded-lg px-3 py-2.5" style="background:var(--accent-amber-light); border:1px solid #fde68a;">
+          <i data-lucide="triangle-alert" style="width:13px;height:13px;color:var(--accent-amber);flex-shrink:0;"></i>
+          <p class="text-xs" style="color:var(--accent-amber);">Early-stage intervention window active</p>
+        </div>
+      </div>
+
+      <!-- Risk Level -->
+      <div class="fade-up fade-up-5 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="flex items-center gap-2 mb-4">
+          <i data-lucide="shield" style="width:14px;height:14px;color:var(--accent-blue);"></i>
+          <p class="mono text-xs font-medium" style="color:var(--text-muted);">RISK LEVEL</p>
+        </div>
+
+        <!-- Risk pill -->
+        <div class="flex items-center justify-center py-5 rounded-xl mb-4" style="background:var(--accent-green-light); border:1px solid #b7e4c7;">
+          <div class="text-center">
+            <span class="serif text-4xl font-medium" style="color:var(--accent-green);">LOW</span>
+            <p class="mono text-xs mt-1" style="color:#52b788;">RISK SCORE 2/10</p>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between text-xs">
+            <span style="color:var(--text-secondary);">Spread probability</span>
+            <span class="mono font-medium" style="color:var(--text-primary);">18%</span>
+          </div>
+          <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
+            <div class="progress-fill h-full rounded-full" style="--target-width:18%; background:#3b82f6; width:0%;"></div>
+          </div>
+
+          <div class="flex items-center justify-between text-xs mt-1">
+            <span style="color:var(--text-secondary);">Yield impact est.</span>
+            <span class="mono font-medium" style="color:var(--text-primary);">3–5%</span>
+          </div>
+          <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
+            <div class="progress-fill h-full rounded-full" style="--target-width:5%; background:#f97316; width:0%;"></div>
+          </div>
+
+          <div class="flex items-center justify-between text-xs mt-1">
+            <span style="color:var(--text-secondary);">Treatment urgency</span>
+            <span class="mono font-medium" style="color:var(--text-primary);">Medium</span>
+          </div>
+          <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
+            <div class="progress-fill h-full rounded-full" style="--target-width:45%; background:#eab308; width:0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environmental Context -->
+      <div class="fade-up fade-up-5 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div class="flex items-center gap-2 mb-4">
+          <i data-lucide="cloud-sun" style="width:14px;height:14px;color:var(--text-secondary);"></i>
+          <p class="mono text-xs font-medium" style="color:var(--text-muted);">ENVIRONMENTAL</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
+            <i data-lucide="thermometer" style="width:16px;height:16px;color:var(--accent-amber);margin:0 auto 4px;"></i>
+            <p class="mono text-base font-medium" style="color:var(--text-primary);">26°C</p>
+            <p class="text-xs" style="color:var(--text-muted);">Temperature</p>
+          </div>
+          <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
+            <i data-lucide="droplets" style="width:16px;height:16px;color:var(--accent-blue);margin:0 auto 4px;"></i>
+            <p class="mono text-base font-medium" style="color:var(--text-primary);">74%</p>
+            <p class="text-xs" style="color:var(--text-muted);">Humidity</p>
+          </div>
+          <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
+            <i data-lucide="wind" style="width:16px;height:16px;color:var(--text-secondary);margin:0 auto 4px;"></i>
+            <p class="mono text-base font-medium" style="color:var(--text-primary);">12 km/h</p>
+            <p class="text-xs" style="color:var(--text-muted);">Wind</p>
+          </div>
+          <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
+            <i data-lucide="sun" style="width:16px;height:16px;color:#f59e0b;margin:0 auto 4px;"></i>
+            <p class="mono text-base font-medium" style="color:var(--text-primary);">6.2 hrs</p>
+            <p class="text-xs" style="color:var(--text-muted);">Sunlight</p>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
+          <span>Field Block 3A · Karnataka, India</span>
+        </div>
+      </div>
+
+      <!-- Report footer -->
+      <div class="rounded-xl px-5 py-4" style="background:var(--surface-2); border:1px solid var(--border);">
+        <p class="mono text-xs mb-2" style="color:var(--text-muted);">REPORT METADATA</p>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex justify-between text-xs">
+            <span style="color:var(--text-secondary);">Report ID</span>
+            <span class="mono" style="color:var(--text-primary);">RPT-7f3a9b</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span style="color:var(--text-secondary);">Model version</span>
+            <span class="mono" style="color:var(--text-primary);">PlantNet v4.2.1</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span style="color:var(--text-secondary);">Processing time</span>
+            <span class="mono" style="color:var(--text-primary);">1.24s</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span style="color:var(--text-secondary);">Dataset</span>
+            <span class="mono" style="color:var(--text-primary);">PDDB-2024</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- end sidebar -->
+  </div>
+</main>
+
+
+<!-- ═══════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════ -->
+<footer class="mt-10 py-6" style="border-top:1px solid var(--border);">
+  <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <div style="background:var(--accent-green); border-radius:6px; width:20px; height:20px;" class="flex items-center justify-center">
+        <i data-lucide="scan-line" style="color:#fff;width:11px;height:11px;"></i>
+      </div>
+      <span class="serif text-sm" style="color:var(--text-secondary);">AgriScan 360</span>
+      <span class="mono text-xs" style="color:var(--text-muted);">© 2024 — All results are advisory only</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="#" class="text-xs" style="color:var(--text-muted);">Documentation</a>
+      <a href="#" class="text-xs" style="color:var(--text-muted);">API Reference</a>
+      <a href="#" class="text-xs" style="color:var(--text-muted);">Support</a>
+      <span class="mono text-xs px-2 py-0.5 rounded" style="background:var(--surface); border:1px solid var(--border); color:var(--text-muted);">v2.4.0</span>
+    </div>
+  </div>
+</footer>
+
+
+<script>
+  // Init Lucide icons
+  lucide.createIcons();
+
+  // ── File Upload Logic ──────────────────────
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) showPreview(file);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.add('dragging');
+  }
+
+  function handleDragLeave(e) {
+    document.getElementById('uploadZone').classList.remove('dragging');
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.remove('dragging');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) showPreview(file);
+  }
+
+  function showPreview(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('previewImg').src = e.target.result;
+      document.getElementById('uploadDefault').classList.add('hidden');
+      document.getElementById('uploadPreview').classList.remove('hidden');
+      document.getElementById('uploadPreview').style.display = 'flex';
+      document.getElementById('uploadPreview').style.alignItems = 'center';
+      document.getElementById('uploadPreview').style.justifyContent = 'center';
+      document.getElementById('uploadPreview').style.position = 'relative';
+      lucide.createIcons();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage(e) {
+    e.stopPropagation();
+    document.getElementById('previewImg').src = '';
+    document.getElementById('uploadDefault').classList.remove('hidden');
+    document.getElementById('uploadPreview').classList.add('hidden');
+    document.getElementById('fileInput').value = '';
+  }
+
+  // ── Simulate analysis with shimmer overlay ──
+  function simulateAnalysis() {
+    const overlay = document.getElementById('processingOverlay');
+    overlay.classList.add('active');
+    setTimeout(() => {
+      overlay.classList.remove('active');
+    }, 2800);
+  }
+</script>
+
+</body>
+</html>
