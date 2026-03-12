@@ -289,12 +289,12 @@
             <div>
               <p class="mono text-xs mb-1" style="color:var(--text-muted);">DIAGNOSIS RESULT</p>
               <h2 id="diseaseName" class="serif text-xl font-medium" style="color:var(--text-primary); letter-spacing:-0.02em;">{{ disease_name }}</h2>
-              <p class="text-xs mt-0.5" style="color:var(--text-secondary);"><span class="italic">Alternaria solani</span> — Fungal Pathogen Class III</p>
+              <p class="text-xs mt-0.5" style="color:var(--text-secondary);"><span id="pathogenName" class="italic">Alternaria solani</span> — <span id="pathogenLabel">Detected Pathogen</span></p>
             </div>
           </div>
           <div class="flex flex-col items-end gap-1.5">
-            <span class="mono text-xs px-2.5 py-1 rounded-full font-medium" style="background:var(--accent-amber-light); color:var(--accent-amber);">MODERATE</span>
-            <span class="mono text-xs" style="color:var(--text-muted);">2024-03-15 · 09:42 UTC</span>
+            <span id="diagnosisSeverityBadge" class="mono text-xs px-2.5 py-1 rounded-full font-medium" style="background:var(--accent-amber-light); color:var(--accent-amber);">MODERATE</span>
+            <span id="timestampValue" class="mono text-xs" style="color:var(--text-muted);">2024-03-15 · 09:42 UTC</span>
           </div>
         </div>
 
@@ -302,8 +302,8 @@
         <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y" style="border-bottom:1px solid var(--border); --tw-divide-color: var(--border);">
           <div class="px-5 py-4">
             <p class="mono text-xs mb-1" style="color:var(--text-muted);">HOST PLANT</p>
-            <p class="text-sm font-medium" style="color:var(--text-primary);">Solanum lycopersicum</p>
-            <p class="text-xs" style="color:var(--text-secondary);">Tomato</p>
+            <p id="hostScientific" class="text-sm font-medium" style="color:var(--text-primary);">Solanum tuberosum</p>
+            <p id="hostCommon" class="text-xs" style="color:var(--text-secondary);">Potato</p>
           </div>
           <div class="px-5 py-4">
             <p class="mono text-xs mb-1" style="color:var(--text-muted);">GROWTH STAGE</p>
@@ -324,7 +324,7 @@
 
         <!-- Description -->
         <div class="px-6 py-5">
-          <p class="text-sm leading-relaxed" style="color:var(--text-secondary);">
+          <p id="diseaseDescription" class="text-sm leading-relaxed" style="color:var(--text-secondary);">
             Early Blight is a common foliar disease caused by <span class="italic">Alternaria solani</span>, characterized by concentric ring lesions with a target-like appearance on older leaves first, progressing upward. The pathogen overwinters in soil and infected plant debris, spreading through wind and rain splash. Current infection presents at <span class="font-medium" style="color:var(--text-primary);">Stage II — Moderate</span>, requiring prompt intervention to prevent yield loss exceeding 15%.
           </p>
         </div>
@@ -395,7 +395,7 @@
           </div>
 
           <!-- Chemical Treatment -->
-          <div class="px-6 py-5" style="border-top:1px solid var(--border);">
+          <div id="chemical-treatment" class="px-6 py-5" style="border-top:1px solid var(--border);">
             <div class="flex items-center gap-2 mb-4">
               <div class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style="background:var(--accent-amber-light);">
                 <i data-lucide="flask-conical" style="width:13px;height:13px;color:var(--accent-amber);"></i>
@@ -507,14 +507,14 @@
         </div>
         <div class="flex justify-between mt-2">
           <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
-          <span class="mono text-xs" style="color:var(--accent-green);">Very High</span>
+          <span id="confidenceLevel" class="mono text-xs" style="color:var(--accent-green);">Very High</span>
           <span class="mono text-xs" style="color:var(--text-muted);">100%</span>
         </div>
         <p class="text-xs mt-3" style="color:var(--text-secondary);">Model trained on 2.4M annotated specimens across 186 species</p>
       </div>
 
       <!-- Severity -->
-      <div class="fade-up fade-up-4 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+      <div id="severity-card" class="fade-up fade-up-4 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
             <i data-lucide="activity" style="width:14px;height:14px;color:var(--accent-amber);"></i>
@@ -527,7 +527,7 @@
         </div>
         <div class="flex justify-between mt-2">
           <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
-          <span class="mono text-xs" style="color:var(--accent-amber);">Mild</span>
+          <span id="severityStage" class="mono text-xs" style="color:var(--accent-amber);">Mild</span>
           <span class="mono text-xs" style="color:var(--text-muted);">100%</span>
         </div>
 
@@ -546,12 +546,12 @@
 
         <div class="mt-4 flex items-center gap-2 rounded-lg px-3 py-2.5" style="background:var(--accent-amber-light); border:1px solid #fde68a;">
           <i data-lucide="triangle-alert" style="width:13px;height:13px;color:var(--accent-amber);flex-shrink:0;"></i>
-          <p class="text-xs" style="color:var(--accent-amber);">Early-stage intervention window active</p>
+          <p id="severityStageMessage" class="text-xs" style="color:var(--accent-amber);">Early-stage intervention window active</p>
         </div>
       </div>
 
       <!-- Risk Level -->
-      <div class="fade-up fade-up-5 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+      <div id="risk-card" class="fade-up fade-up-5 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
         <div class="flex items-center gap-2 mb-4">
           <i data-lucide="shield" style="width:14px;height:14px;color:var(--accent-blue);"></i>
           <p class="mono text-xs font-medium" style="color:var(--text-muted);">RISK LEVEL</p>
@@ -560,34 +560,34 @@
         <!-- Risk pill -->
         <div class="flex items-center justify-center py-5 rounded-xl mb-4" style="background:var(--accent-green-light); border:1px solid #b7e4c7;">
           <div class="text-center">
-            <span class="serif text-4xl font-medium" style="color:var(--accent-green);">LOW</span>
-            <p class="mono text-xs mt-1" style="color:#52b788;">RISK SCORE 2/10</p>
+            <span id="riskLevel" class="serif text-4xl font-medium" style="color:var(--accent-green);">LOW</span>
+            <p id="riskScore" class="mono text-xs mt-1" style="color:#52b788;">RISK SCORE 2/10</p>
           </div>
         </div>
 
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between text-xs">
             <span style="color:var(--text-secondary);">Spread probability</span>
-            <span class="mono font-medium" style="color:var(--text-primary);">18%</span>
+            <span id="spreadProbability" class="mono font-medium" style="color:var(--text-primary);">18%</span>
           </div>
           <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
-            <div class="progress-fill h-full rounded-full" style="--target-width:18%; background:#3b82f6; width:0%;"></div>
+            <div id="spreadProbabilityBar" class="h-full rounded-full" style="background:#3b82f6; width:18%; transition: width 0.6s ease;"></div>
           </div>
 
           <div class="flex items-center justify-between text-xs mt-1">
             <span style="color:var(--text-secondary);">Yield impact est.</span>
-            <span class="mono font-medium" style="color:var(--text-primary);">3–5%</span>
+            <span id="yieldImpact" class="mono font-medium" style="color:var(--text-primary);">3–5%</span>
           </div>
           <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
-            <div class="progress-fill h-full rounded-full" style="--target-width:5%; background:#f97316; width:0%;"></div>
+            <div id="yieldImpactBar" class="h-full rounded-full" style="background:#f97316; width:5%; transition: width 0.6s ease;"></div>
           </div>
 
           <div class="flex items-center justify-between text-xs mt-1">
             <span style="color:var(--text-secondary);">Treatment urgency</span>
-            <span class="mono font-medium" style="color:var(--text-primary);">Medium</span>
+            <span id="treatmentUrgency" class="mono font-medium" style="color:var(--text-primary);">Medium</span>
           </div>
           <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:5px; border:1px solid var(--border);">
-            <div class="progress-fill h-full rounded-full" style="--target-width:45%; background:#eab308; width:0%;"></div>
+            <div id="treatmentUrgencyBar" class="h-full rounded-full" style="background:#eab308; width:45%; transition: width 0.6s ease;"></div>
           </div>
         </div>
       </div>
@@ -601,22 +601,22 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
             <i data-lucide="thermometer" style="width:16px;height:16px;color:var(--accent-amber);margin:0 auto 4px;"></i>
-            <p class="mono text-base font-medium" style="color:var(--text-primary);">26°C</p>
+            <p id="temperatureValue" class="mono text-base font-medium" style="color:var(--text-primary);">26°C</p>
             <p class="text-xs" style="color:var(--text-muted);">Temperature</p>
           </div>
           <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
             <i data-lucide="droplets" style="width:16px;height:16px;color:var(--accent-blue);margin:0 auto 4px;"></i>
-            <p class="mono text-base font-medium" style="color:var(--text-primary);">74%</p>
+            <p id="humidityValue" class="mono text-base font-medium" style="color:var(--text-primary);">74%</p>
             <p class="text-xs" style="color:var(--text-muted);">Humidity</p>
           </div>
           <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
             <i data-lucide="wind" style="width:16px;height:16px;color:var(--text-secondary);margin:0 auto 4px;"></i>
-            <p class="mono text-base font-medium" style="color:var(--text-primary);">12 km/h</p>
+            <p id="windSpeedValue" class="mono text-base font-medium" style="color:var(--text-primary);">12 km/h</p>
             <p class="text-xs" style="color:var(--text-muted);">Wind</p>
           </div>
           <div class="rounded-lg p-3 text-center" style="background:var(--surface-2); border:1px solid var(--border);">
             <i data-lucide="sun" style="width:16px;height:16px;color:#f59e0b;margin:0 auto 4px;"></i>
-            <p class="mono text-base font-medium" style="color:var(--text-primary);">6.2 hrs</p>
+            <p id="sunlightHoursValue" class="mono text-base font-medium" style="color:var(--text-primary);">6.2 hrs</p>
             <p class="text-xs" style="color:var(--text-muted);">Sunlight</p>
           </div>
         </div>
@@ -705,6 +705,24 @@
     safeSetText('diseaseName', '');
     safeSetText('confidenceScore', '0%');
     safeSetText('severityIndex', '0%');
+    safeSetText('confidenceLevel', 'Very High');
+    safeSetText('severityStage', 'Mild');
+    safeSetText('severityStageMessage', 'Early-stage intervention window active');
+    safeSetText('riskLevel', 'LOW');
+    safeSetText('riskScore', 'RISK SCORE 0/10');
+    safeSetText('spreadProbability', '0%');
+    safeSetText('yieldImpact', '0-5%');
+    safeSetText('treatmentUrgency', 'Low');
+    safeSetText('temperatureValue', '--');
+    safeSetText('humidityValue', '--');
+    safeSetText('windSpeedValue', '--');
+    safeSetText('sunlightHoursValue', '--');
+    safeSetText('timestampValue', '--');
+    safeSetText('pathogenName', 'None detected');
+    safeSetText('pathogenLabel', 'Healthy Tissue');
+    safeSetText('hostScientific', 'Solanum tuberosum');
+    safeSetText('hostCommon', 'Potato');
+    safeSetText('diseaseDescription', 'Diagnosis description will appear here after analysis.');
 
     const confidenceBar = getEl('confidenceBar');
     if (confidenceBar) {
@@ -715,6 +733,28 @@
     if (severityBar) {
       severityBar.style.width = '0%';
     }
+
+    const spreadProbabilityBar = getEl('spreadProbabilityBar');
+    if (spreadProbabilityBar) {
+      spreadProbabilityBar.style.width = '0%';
+    }
+
+    const yieldImpactBar = getEl('yieldImpactBar');
+    if (yieldImpactBar) {
+      yieldImpactBar.style.width = '0%';
+    }
+
+    const treatmentUrgencyBar = getEl('treatmentUrgencyBar');
+    if (treatmentUrgencyBar) {
+      treatmentUrgencyBar.style.width = '0%';
+    }
+
+    const severityCard = getEl('severity-card');
+    const riskCard = getEl('risk-card');
+    const chemicalTreatment = getEl('chemical-treatment');
+    if (severityCard) severityCard.style.display = 'block';
+    if (riskCard) riskCard.style.display = 'block';
+    if (chemicalTreatment) chemicalTreatment.style.display = 'block';
 
     const originalLeafImage = getEl('originalLeafImage');
     if (originalLeafImage) {
@@ -884,6 +924,67 @@
     }
   }
 
+  function updateDiagnosticMetadata(result) {
+    safeSetText('confidenceLevel', result.confidence_level || 'Unknown');
+    safeSetText('severityStage', result.severity_stage || 'Unknown');
+    safeSetText('severityStageMessage', `${result.severity_stage || 'Unknown'} stage detected`);
+    safeSetText('diagnosisSeverityBadge', String(result.severity_stage || 'Unknown').toUpperCase());
+    safeSetText('timestampValue', result.timestamp || '--');
+    safeSetText('pathogenName', result.pathogen || 'None detected');
+    safeSetText('pathogenLabel', result.pathogen && result.pathogen !== 'None detected' ? 'Detected Pathogen' : 'Healthy Tissue');
+    safeSetText('hostScientific', result.host_scientific || 'Solanum tuberosum');
+    safeSetText('hostCommon', result.host_common || 'Potato');
+    safeSetText('diseaseDescription', result.description || 'Diagnosis description unavailable.');
+
+    const riskScore = Number(result.risk_score);
+    safeSetText('riskLevel', String(result.risk_level || 'None').toUpperCase());
+    safeSetText('riskScore', Number.isFinite(riskScore) ? `RISK SCORE ${riskScore}/10` : 'RISK SCORE --/10');
+
+    const spreadProbability = Number(result.spread_probability);
+    safeSetText('spreadProbability', Number.isFinite(spreadProbability) ? `${spreadProbability}%` : '--');
+    const spreadProbabilityBar = getEl('spreadProbabilityBar');
+    if (spreadProbabilityBar) {
+      spreadProbabilityBar.style.width = Number.isFinite(spreadProbability) ? `${Math.max(0, Math.min(100, spreadProbability))}%` : '0%';
+    }
+
+    const yieldImpact = result.yield_impact || '--';
+    safeSetText('yieldImpact', yieldImpact);
+    const yieldImpactBar = getEl('yieldImpactBar');
+    if (yieldImpactBar) {
+      let width = 0;
+      if (yieldImpact === '0-5%') width = 5;
+      else if (yieldImpact === '5-15%') width = 15;
+      else if (yieldImpact === '15-35%') width = 35;
+      else if (yieldImpact === '35-60%') width = 60;
+      yieldImpactBar.style.width = `${width}%`;
+    }
+
+    safeSetText('treatmentUrgency', result.treatment_urgency || '--');
+    const treatmentUrgencyBar = getEl('treatmentUrgencyBar');
+    if (treatmentUrgencyBar) {
+      const urgency = result.treatment_urgency || '';
+      const width = urgency === 'High' ? 85 : urgency === 'Medium' ? 55 : urgency === 'Low' ? 25 : 0;
+      treatmentUrgencyBar.style.width = `${width}%`;
+    }
+
+    const temperature = Number(result.temperature);
+    const humidity = Number(result.humidity);
+    const windSpeed = Number(result.wind_speed);
+    const sunlight = Number(result.sunlight_hours);
+    safeSetText('temperatureValue', Number.isFinite(temperature) ? `${temperature}°C` : '--');
+    safeSetText('humidityValue', Number.isFinite(humidity) ? `${humidity}%` : '--');
+    safeSetText('windSpeedValue', Number.isFinite(windSpeed) ? `${windSpeed} km/h` : '--');
+    safeSetText('sunlightHoursValue', Number.isFinite(sunlight) ? `${sunlight} hrs` : '--');
+
+    const isHealthy = result.disease_name === 'Potato Healthy';
+    const severityCard = getEl('severity-card');
+    const riskCard = getEl('risk-card');
+    const chemicalTreatment = getEl('chemical-treatment');
+    if (severityCard) severityCard.style.display = isHealthy ? 'none' : 'block';
+    if (riskCard) riskCard.style.display = isHealthy ? 'none' : 'block';
+    if (chemicalTreatment) chemicalTreatment.style.display = isHealthy ? 'none' : 'block';
+  }
+
   async function runDiagnostics() {
     console.log('Sending image to backend');
 
@@ -918,6 +1019,7 @@
       const severityPct = Number(result.severity_pct);
 
       updateResultFields(diseaseName, confidenceScore, severityPct);
+      updateDiagnosticMetadata(result);
 
       safeSetDisplay('diagnosisPanel', 'block');
       safeSetDisplay('actionPlan', 'block');
