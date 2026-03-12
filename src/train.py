@@ -1,7 +1,9 @@
 import os
 import argparse
 
+import numpy as np
 import tensorflow as tf
+from sklearn.utils.class_weight import compute_class_weight
 
 from src.dataset import make_dataset_from_directory
 from src.model import build_model
@@ -13,9 +15,10 @@ def parse_args():
     parser.add_argument("--data_dir", type=str, default="data")
     parser.add_argument("--img_size", type=int, default=224)  # INT ONLY
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=25)
-    parser.add_argument("--base", type=str, default="MobileNetV3")
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--epochs", type=int, default=15)
+    parser.add_argument("--fine_tune_epochs", type=int, default=10)
+    parser.add_argument("--base", type=str, default="EfficientNetB0")
+    parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--output_dir", type=str, default="outputs")
     return parser.parse_args()
 
@@ -42,7 +45,20 @@ def main():
         augment_data=False
     )
 
-    model = build_model(
+    labels = []
+    for _, y in train_ds.unbatch():
+        labels.append(np.argmax(y.numpy()))
+
+    labels = np.array(labels)
+    class_weights = compute_class_weight(
+        class_weight="balanced",
+        classes=np.unique(labels),
+        y=labels,
+    )
+    class_weight_dict = dict(enumerate(class_weights))
+    print(f"Using class weights: {class_weight_dict}")
+
+    model, base_model = build_model(
         num_classes=len(class_names),
         base=args.base,
         lr=args.lr,
@@ -62,20 +78,30 @@ def main():
         save_best_only=True
     )
 
-    model.fit(
+    history = model.fit(
         train_ds,
         validation_data=val_ds,
         epochs=args.epochs,
-        callbacks=[early_stop, checkpoint]
+        callbacks=[early_stop, checkpoint],
+        class_weight=class_weight_dict,
     )
 
     print("Starting fine-tuning stage...")
 
-    base_model = model.layers[0]
     base_model.trainable = True
 
-    for layer in base_model.layers[:100]:
+    for layer in base_model.layers[:-20]:
         layer.trainable = False
+
+    for layer in base_model.layers[-20:]:
+        layer.trainable = True
+
+    # Freeze BN statistics during fine-tuning for stability on small datasets.
+    for layer in base_model.layers:
+        if isinstance(layer, tf.keras.layers.BatchNormalization):
+            layer.trainable = False
+
+    print("Fine-tuning trainable layers in backbone:", sum(1 for l in base_model.layers if l.trainable))
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
@@ -83,11 +109,12 @@ def main():
         metrics=["accuracy"]
     )
 
-    model.fit(
+    history_fine = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=10,
-        callbacks=[early_stop, checkpoint]
+        epochs=args.fine_tune_epochs,
+        callbacks=[early_stop, checkpoint],
+        class_weight=class_weight_dict,
     )
 
     model_path = os.path.join(args.output_dir, "potato_model.keras")

@@ -3,38 +3,33 @@ import numpy as np
 import tensorflow as tf
 
 
-def _find_last_conv_layer(layer):
-    if isinstance(layer, tf.keras.Model):
-        for nested_layer in reversed(layer.layers):
-            conv_layer = _find_last_conv_layer(nested_layer)
-            if conv_layer is not None:
-                return conv_layer
-
-    if isinstance(layer, (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D)):
-        output_tensor = getattr(layer, "output", None)
-        if output_tensor is not None and len(output_tensor.shape) == 4:
+def _find_last_conv_layer(model):
+    # Search inside nested submodels first (e.g., EfficientNet backbone as model.layers[0]).
+    for layer in reversed(model.layers):
+        if isinstance(layer, tf.keras.Model):
+            for sublayer in reversed(layer.layers):
+                if isinstance(sublayer, tf.keras.layers.Conv2D):
+                    return sublayer
+        if isinstance(layer, tf.keras.layers.Conv2D):
             return layer
-
-    return None
+    raise ValueError("Could not find a Conv2D layer for GradCAM.")
 
 
 def generate_gradcam(model, img_array):
-    base_model = model.layers[0]
-    last_conv_layer = _find_last_conv_layer(base_model)
-    if last_conv_layer is None:
-        raise ValueError("Could not find a convolutional layer for Grad-CAM.")
+    last_conv_layer = _find_last_conv_layer(model)
 
     grad_model = tf.keras.models.Model(
-        inputs=base_model.inputs,
-        outputs=[last_conv_layer.output, base_model.output]
+        inputs=model.input,
+        outputs=[
+            last_conv_layer.output,
+            model.output,
+        ],
     )
 
     img_tensor = tf.convert_to_tensor(img_array, dtype=tf.float32)
 
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(img_tensor, training=False)
-        for layer in model.layers[1:]:
-            predictions = layer(predictions, training=False)
         pred_index = tf.argmax(predictions[0])
         class_channel = predictions[:, pred_index]
 
@@ -44,12 +39,7 @@ def generate_gradcam(model, img_array):
     conv_outputs = conv_outputs[0]
     heatmap = tf.reduce_sum(conv_outputs * pooled_gradients, axis=-1)
     heatmap = tf.maximum(heatmap, 0)
-    max_val = tf.reduce_max(heatmap)
-    heatmap = tf.cond(
-        max_val > 0,
-        lambda: heatmap / max_val,
-        lambda: tf.zeros_like(heatmap)
-    )
+    heatmap /= tf.reduce_max(heatmap) + 1e-8
 
     target_height = int(img_tensor.shape[1])
     target_width = int(img_tensor.shape[2])
@@ -74,4 +64,4 @@ def overlay_heatmap(original_image, heatmap):
     colored_heatmap = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
     colored_heatmap = cv2.cvtColor(colored_heatmap, cv2.COLOR_BGR2RGB)
 
-    return cv2.addWeighted(original_image, 0.6, colored_heatmap, 0.4, 0)
+    return cv2.addWeighted(original_image, 0.7, colored_heatmap, 0.3, 0)

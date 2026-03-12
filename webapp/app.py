@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 
+import cv2
 import numpy as np
 import tensorflow as tf
 import uvicorn
@@ -18,6 +19,8 @@ STATIC_DIR = WEBAPP_DIR / "static"
 TEMPLATES_DIR = WEBAPP_DIR / "templates"
 MODEL_PATH = BASE_DIR / "outputs" / "potato_model.keras"
 GRADCAM_OUTPUT_PATH = STATIC_DIR / "gradcam_result.png"
+SEGMENTED_OUTPUT_PATH = STATIC_DIR / "segmented_leaf.png"
+USE_SEGMENTATION = False
 
 class_names = [
     "Potato Early Blight",
@@ -35,16 +38,35 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def preprocess_image(image_path: Path) -> np.ndarray:
-    """Load an image file and return a normalized model-ready batch tensor."""
-    img = tf.keras.preprocessing.image.load_img(
-        image_path,
-        target_size=(224, 224),
+def segment_leaf(image_path: Path) -> np.ndarray:
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise ValueError(f"Could not read image for segmentation: {image_path}")
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    _, thresh = cv2.threshold(
+        blur,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU,
     )
-    img = tf.keras.preprocessing.image.img_to_array(img)
-    img = img / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img
+
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+
+    if not contours:
+        return img
+
+    largest = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest)
+    leaf = img[y : y + h, x : x + w]
+
+    return leaf
 
 
 if not MODEL_PATH.exists():
@@ -69,11 +91,25 @@ async def predict(file: UploadFile = File(...)):
             temp_path = Path(temp_file.name)
             temp_file.write(await file.read())
 
-        image_batch = preprocess_image(temp_path)
+        if USE_SEGMENTATION:
+            leaf_img = segment_leaf(temp_path)
+            cv2.imwrite(str(SEGMENTED_OUTPUT_PATH), leaf_img)
+        else:
+            leaf_img = cv2.imread(str(temp_path))
+            if leaf_img is None:
+                raise ValueError(f"Could not read uploaded image: {temp_path}")
+
+        leaf_img = cv2.resize(leaf_img, (224, 224))
+        leaf_img = cv2.cvtColor(leaf_img, cv2.COLOR_BGR2RGB)
+
+        # Keep pixel scale in [0, 255] to match EfficientNet preprocessing in training.
+        image_batch = leaf_img.astype(np.float32)
+        image_batch = np.expand_dims(image_batch, axis=0)
+
         preds = model.predict(image_batch)
         heatmap = generate_gradcam(model, image_batch)
 
-        original_image = np.array(Image.open(temp_path).convert("RGB"))
+        original_image = leaf_img
         overlay_image = overlay_heatmap(original_image, heatmap)
         Image.fromarray(overlay_image).save(GRADCAM_OUTPUT_PATH)
 

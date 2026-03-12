@@ -2,7 +2,7 @@
 import argparse
 import json
 import tensorflow as tf
-from dataset import preprocess_image
+from src.dataset import preprocess_image
 
 
 def main():
