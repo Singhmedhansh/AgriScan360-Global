@@ -269,7 +269,7 @@
         <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)" />
 
         <div class="flex items-center gap-2 mt-4">
-          <button onclick="simulateAnalysis()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
+          <button id="runDiagnosticsBtn" onclick="runDiagnostics()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
             <i data-lucide="cpu" style="width:14px;height:14px;"></i>
             Run Diagnostics
           </button>
@@ -278,6 +278,7 @@
       </div>
 
       <!-- Diagnosis Result Card -->
+      <div id="diagnosisPanel" style="display:none;">
       <div id="diagnosisCard" class="fade-up fade-up-2 rounded-xl" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
         <!-- Card header -->
         <div class="flex items-start justify-between px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
@@ -287,7 +288,7 @@
             </div>
             <div>
               <p class="mono text-xs mb-1" style="color:var(--text-muted);">DIAGNOSIS RESULT</p>
-              <h2 class="serif text-xl font-medium" style="color:var(--text-primary); letter-spacing:-0.02em;">{{ disease_name }}</h2>
+              <h2 id="diseaseName" class="serif text-xl font-medium" style="color:var(--text-primary); letter-spacing:-0.02em;">{{ disease_name }}</h2>
               <p class="text-xs mt-0.5" style="color:var(--text-secondary);"><span class="italic">Alternaria solani</span> — Fungal Pathogen Class III</p>
             </div>
           </div>
@@ -329,8 +330,26 @@
         </div>
       </div>
 
+      <div class="fade-up fade-up-3 rounded-xl mt-6" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
+        <div class="px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
+          <p class="mono text-xs mb-1" style="color:var(--text-muted);">AI DISEASE LOCALIZATION</p>
+          <h2 class="font-semibold text-base" style="color:var(--text-primary);">AI Disease Localization</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-5">
+          <div>
+            <p class="mono text-xs mb-2" style="color:var(--text-muted);">ORIGINAL LEAF IMAGE</p>
+            <img id="originalLeafImage" src="" alt="Original leaf specimen" style="width:100%; max-height:280px; object-fit:contain; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);" />
+          </div>
+          <div>
+            <p class="mono text-xs mb-2" style="color:var(--text-muted);">GRAD-CAM HEATMAP</p>
+            <img id="gradcamImage" src="" alt="Grad-CAM heatmap" style="width:100%; max-height:280px; object-fit:contain; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);" />
+          </div>
+        </div>
+      </div>
+      </div>
+
       <!-- Action Plan -->
-      <div id="actionPlan" class="fade-up fade-up-3 rounded-xl" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+      <div id="actionPlan" class="fade-up fade-up-3 rounded-xl" style="display:none; background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
         <div class="px-6 pt-5 pb-4 flex items-center justify-between" style="border-bottom:1px solid var(--border);">
           <div>
             <p class="mono text-xs mb-1" style="color:var(--text-muted);">TREATMENT PROTOCOL</p>
@@ -472,7 +491,7 @@
     <!-- ──────────────────────────────────────
          RIGHT SIDEBAR: Metrics
     ────────────────────────────────────────── -->
-    <div class="flex flex-col gap-5">
+    <div id="metricsPanel" class="flex flex-col gap-5" style="display:none;">
 
       <!-- Confidence Score -->
       <div class="fade-up fade-up-3 rounded-xl p-5" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
@@ -481,10 +500,10 @@
             <i data-lucide="bar-chart-2" style="width:14px;height:14px;color:var(--accent-green);"></i>
             <p class="mono text-xs font-medium" style="color:var(--text-muted);">CONFIDENCE</p>
           </div>
-          <span class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ confidence_score }}</span>
+          <span id="confidenceScore" class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ confidence_score }}</span>
         </div>
         <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:8px; border:1px solid var(--border);">
-          <div class="progress-fill h-full rounded-full" style="--target-width:98%; background:var(--accent-green); width:0%;"></div>
+          <div id="confidenceBar" class="h-full rounded-full" style="background:var(--accent-green); width:0%; transition: width 0.6s ease;"></div>
         </div>
         <div class="flex justify-between mt-2">
           <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
@@ -501,10 +520,10 @@
             <i data-lucide="activity" style="width:14px;height:14px;color:var(--accent-amber);"></i>
             <p class="mono text-xs font-medium" style="color:var(--text-muted);">SEVERITY INDEX</p>
           </div>
-          <span class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ severity_pct }}</span>
+          <span id="severityIndex" class="serif text-2xl font-medium" style="color:var(--text-primary);">{{ severity_pct }}</span>
         </div>
         <div class="rounded-full overflow-hidden" style="background:var(--surface-2); height:8px; border:1px solid var(--border);">
-          <div class="progress-fill h-full rounded-full" style="--target-width:12%; background:var(--accent-amber); width:0%;"></div>
+          <div id="severityBar" class="h-full rounded-full" style="background:var(--accent-amber); width:0%; transition: width 0.6s ease;"></div>
         </div>
         <div class="flex justify-between mt-2">
           <span class="mono text-xs" style="color:var(--text-muted);">0%</span>
@@ -662,6 +681,24 @@
   // Init Lucide icons
   lucide.createIcons();
 
+  const API_URL = 'http://127.0.0.1:8080/predict';
+  let selectedFile = null;
+
+  function resetResultFields() {
+    document.getElementById('diagnosisPanel').style.display = 'none';
+    document.getElementById('actionPlan').style.display = 'none';
+    document.getElementById('metricsPanel').style.display = 'none';
+    document.getElementById('diseaseName').textContent = '';
+    document.getElementById('confidenceScore').textContent = '0%';
+    document.getElementById('severityIndex').textContent = '0%';
+    document.getElementById('confidenceBar').style.width = '0%';
+    document.getElementById('severityBar').style.width = '0%';
+    document.getElementById('originalLeafImage').src = '';
+    document.getElementById('gradcamImage').src = '';
+  }
+
+  resetResultFields();
+
   // ── File Upload Logic ──────────────────────
   function handleFileSelect(e) {
     const file = e.target.files[0];
@@ -681,13 +718,21 @@
     e.preventDefault();
     document.getElementById('uploadZone').classList.remove('dragging');
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) showPreview(file);
+    if (file && file.type.startsWith('image/')) {
+      showPreview(file);
+      // Keep the hidden file input in sync for drag-and-drop uploads.
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      document.getElementById('fileInput').files = transfer.files;
+    }
   }
 
   function showPreview(file) {
+    selectedFile = file;
     const reader = new FileReader();
     reader.onload = (e) => {
       document.getElementById('previewImg').src = e.target.result;
+      document.getElementById('originalLeafImage').src = e.target.result;
       document.getElementById('uploadDefault').classList.add('hidden');
       document.getElementById('uploadPreview').classList.remove('hidden');
       document.getElementById('uploadPreview').style.display = 'flex';
@@ -701,19 +746,92 @@
 
   function clearImage(e) {
     e.stopPropagation();
+    selectedFile = null;
     document.getElementById('previewImg').src = '';
     document.getElementById('uploadDefault').classList.remove('hidden');
     document.getElementById('uploadPreview').classList.add('hidden');
     document.getElementById('fileInput').value = '';
+    resetResultFields();
   }
 
-  // ── Simulate analysis with shimmer overlay ──
-  function simulateAnalysis() {
+  function setLoadingState(isLoading) {
+    const button = document.getElementById('runDiagnosticsBtn');
     const overlay = document.getElementById('processingOverlay');
-    overlay.classList.add('active');
-    setTimeout(() => {
+
+    if (isLoading) {
+      button.disabled = true;
+      button.style.opacity = '0.75';
+      button.style.cursor = 'not-allowed';
+      button.innerHTML = '<i data-lucide="loader-circle" style="width:14px;height:14px;" class="animate-spin"></i> Running...';
+      overlay.classList.add('active');
+      lucide.createIcons();
+    } else {
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+      button.innerHTML = '<i data-lucide="cpu" style="width:14px;height:14px;"></i> Run Diagnostics';
       overlay.classList.remove('active');
-    }, 2800);
+      lucide.createIcons();
+    }
+  }
+
+  function updateResultFields(diseaseName, confidenceScore, severityPct) {
+    document.getElementById('diseaseName').textContent = diseaseName;
+    document.getElementById('confidenceScore').textContent = confidenceScore;
+    document.getElementById('severityIndex').textContent = severityPct;
+    const confNum = parseFloat(confidenceScore);
+    const sevNum = parseFloat(severityPct);
+    document.getElementById('confidenceBar').style.width = Number.isFinite(confNum) ? confidenceScore : '0%';
+    document.getElementById('severityBar').style.width = Number.isFinite(sevNum) ? severityPct : '0%';
+  }
+
+  async function runDiagnostics() {
+    const fileInput = document.getElementById('fileInput');
+    const file = selectedFile || fileInput.files[0];
+
+    if (!fileInput.files.length && !selectedFile) {
+      alert('Please upload an image first.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setLoadingState(true);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Backend returned a non-OK response.');
+      }
+
+      const data = await response.json();
+      const diseaseName = data.disease_name || 'Unknown';
+      const confidenceScore = Number(data.confidence_score);
+      const severityPct = Number(data.severity_pct);
+
+      updateResultFields(
+        diseaseName,
+        Number.isFinite(confidenceScore) ? `${confidenceScore}%` : '--',
+        Number.isFinite(severityPct) ? `${severityPct}%` : '--'
+      );
+      document.getElementById('diagnosisPanel').style.display = 'block';
+      document.getElementById('actionPlan').style.display = 'block';
+      document.getElementById('metricsPanel').style.display = 'flex';
+      if (data.heatmap_url) {
+        document.getElementById('gradcamImage').src = data.heatmap_url + '?t=' + new Date().getTime();
+      }
+    } catch (error) {
+      resetResultFields();
+      updateResultFields('Prediction failed', '--', '--');
+      console.error('Prediction failed:', error);
+    } finally {
+      setLoadingState(false);
+    }
   }
 </script>
 
