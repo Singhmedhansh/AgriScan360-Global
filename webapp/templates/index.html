@@ -217,7 +217,7 @@
           id="uploadZone"
           class="upload-zone lab-grid relative rounded-xl cursor-pointer transition-all"
           style="border: 2px dashed var(--border-strong); min-height: 220px; display:flex; align-items:center; justify-content:center;"
-          onclick="document.getElementById('fileInput').click()"
+          onclick="document.getElementById('imageUpload')?.click()"
           ondragover="handleDragOver(event)"
           ondragleave="handleDragLeave(event)"
           ondrop="handleDrop(event)"
@@ -266,7 +266,7 @@
           </div>
         </div>
 
-        <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)" />
+        <input type="file" id="imageUpload" accept="image/*" class="hidden" onchange="handleFileSelect(event)" />
 
         <div class="flex items-center gap-2 mt-4">
           <button id="runDiagnosticsBtn" onclick="runDiagnostics()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
@@ -333,7 +333,7 @@
       <div class="fade-up fade-up-3 rounded-xl mt-6" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
         <div class="px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
           <p class="mono text-xs mb-1" style="color:var(--text-muted);">AI DISEASE LOCALIZATION</p>
-          <h2 class="font-semibold text-base" style="color:var(--text-primary);">AI Disease Localization</h2>
+          <h3 class="font-semibold text-base" style="color:var(--text-primary);">AI Disease Localization</h3>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-5">
           <div>
@@ -342,7 +342,7 @@
           </div>
           <div>
             <p class="mono text-xs mb-2" style="color:var(--text-muted);">GRAD-CAM HEATMAP</p>
-            <img id="gradcamImage" src="" alt="Grad-CAM heatmap" style="width:100%; max-height:280px; object-fit:contain; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);" />
+            <img id="gradcamImage" width="300" src="" alt="Grad-CAM heatmap" style="width:100%; max-height:280px; object-fit:contain; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);" />
           </div>
         </div>
       </div>
@@ -678,85 +678,170 @@
 
 
 <script>
-  // Init Lucide icons
-  lucide.createIcons();
-
-  const API_URL = 'http://127.0.0.1:8080/predict';
   let selectedFile = null;
 
-  function resetResultFields() {
-    document.getElementById('diagnosisPanel').style.display = 'none';
-    document.getElementById('actionPlan').style.display = 'none';
-    document.getElementById('metricsPanel').style.display = 'none';
-    document.getElementById('diseaseName').textContent = '';
-    document.getElementById('confidenceScore').textContent = '0%';
-    document.getElementById('severityIndex').textContent = '0%';
-    document.getElementById('confidenceBar').style.width = '0%';
-    document.getElementById('severityBar').style.width = '0%';
-    document.getElementById('originalLeafImage').src = '';
-    document.getElementById('gradcamImage').src = '';
+  function getEl(id) {
+    return document.getElementById(id);
   }
 
-  resetResultFields();
+  function safeSetText(id, text) {
+    const el = getEl(id);
+    if (el) {
+      el.textContent = text;
+    }
+  }
 
-  // ── File Upload Logic ──────────────────────
+  function safeSetDisplay(id, displayValue) {
+    const el = getEl(id);
+    if (el) {
+      el.style.display = displayValue;
+    }
+  }
+
+  function resetResultFields() {
+    safeSetDisplay('diagnosisPanel', 'none');
+    safeSetDisplay('actionPlan', 'none');
+    safeSetDisplay('metricsPanel', 'none');
+    safeSetText('diseaseName', '');
+    safeSetText('confidenceScore', '0%');
+    safeSetText('severityIndex', '0%');
+
+    const confidenceBar = getEl('confidenceBar');
+    if (confidenceBar) {
+      confidenceBar.style.width = '0%';
+    }
+
+    const severityBar = getEl('severityBar');
+    if (severityBar) {
+      severityBar.style.width = '0%';
+    }
+
+    const originalLeafImage = getEl('originalLeafImage');
+    if (originalLeafImage) {
+      originalLeafImage.src = '';
+    }
+
+    const gradcamImage = getEl('gradcamImage');
+    if (gradcamImage) {
+      gradcamImage.src = '';
+    }
+  }
+
   function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) showPreview(file);
+    const file = e.target?.files?.[0];
+    if (file) {
+      showPreview(file);
+    }
   }
 
   function handleDragOver(e) {
     e.preventDefault();
-    document.getElementById('uploadZone').classList.add('dragging');
+    const uploadZone = getEl('uploadZone');
+    if (uploadZone) {
+      uploadZone.classList.add('dragging');
+    }
   }
 
   function handleDragLeave(e) {
-    document.getElementById('uploadZone').classList.remove('dragging');
+    const uploadZone = getEl('uploadZone');
+    if (uploadZone) {
+      uploadZone.classList.remove('dragging');
+    }
   }
 
   function handleDrop(e) {
     e.preventDefault();
-    document.getElementById('uploadZone').classList.remove('dragging');
-    const file = e.dataTransfer.files[0];
+    const uploadZone = getEl('uploadZone');
+    if (uploadZone) {
+      uploadZone.classList.remove('dragging');
+    }
+
+    const file = e.dataTransfer?.files?.[0];
     if (file && file.type.startsWith('image/')) {
       showPreview(file);
-      // Keep the hidden file input in sync for drag-and-drop uploads.
-      const transfer = new DataTransfer();
-      transfer.items.add(file);
-      document.getElementById('fileInput').files = transfer.files;
+      const fileInput = getEl('imageUpload');
+      if (fileInput && typeof DataTransfer !== 'undefined') {
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        fileInput.files = transfer.files;
+      }
     }
   }
 
   function showPreview(file) {
     selectedFile = file;
     const reader = new FileReader();
+
     reader.onload = (e) => {
-      document.getElementById('previewImg').src = e.target.result;
-      document.getElementById('originalLeafImage').src = e.target.result;
-      document.getElementById('uploadDefault').classList.add('hidden');
-      document.getElementById('uploadPreview').classList.remove('hidden');
-      document.getElementById('uploadPreview').style.display = 'flex';
-      document.getElementById('uploadPreview').style.alignItems = 'center';
-      document.getElementById('uploadPreview').style.justifyContent = 'center';
-      document.getElementById('uploadPreview').style.position = 'relative';
-      lucide.createIcons();
+      const result = e.target?.result || '';
+      const previewImg = getEl('previewImg');
+      if (previewImg) {
+        previewImg.src = result;
+      }
+
+      const originalLeafImage = getEl('originalLeafImage');
+      if (originalLeafImage) {
+        originalLeafImage.src = result;
+      }
+
+      const uploadDefault = getEl('uploadDefault');
+      if (uploadDefault) {
+        uploadDefault.classList.add('hidden');
+      }
+
+      const uploadPreview = getEl('uploadPreview');
+      if (uploadPreview) {
+        uploadPreview.classList.remove('hidden');
+        uploadPreview.style.display = 'flex';
+        uploadPreview.style.alignItems = 'center';
+        uploadPreview.style.justifyContent = 'center';
+        uploadPreview.style.position = 'relative';
+      }
+
+      if (window.lucide) {
+        lucide.createIcons();
+      }
     };
+
     reader.readAsDataURL(file);
   }
 
   function clearImage(e) {
-    e.stopPropagation();
+    if (e) {
+      e.stopPropagation();
+    }
+
     selectedFile = null;
-    document.getElementById('previewImg').src = '';
-    document.getElementById('uploadDefault').classList.remove('hidden');
-    document.getElementById('uploadPreview').classList.add('hidden');
-    document.getElementById('fileInput').value = '';
+    const previewImg = getEl('previewImg');
+    if (previewImg) {
+      previewImg.src = '';
+    }
+
+    const uploadDefault = getEl('uploadDefault');
+    if (uploadDefault) {
+      uploadDefault.classList.remove('hidden');
+    }
+
+    const uploadPreview = getEl('uploadPreview');
+    if (uploadPreview) {
+      uploadPreview.classList.add('hidden');
+    }
+
+    const fileInput = getEl('imageUpload');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+
     resetResultFields();
   }
 
   function setLoadingState(isLoading) {
-    const button = document.getElementById('runDiagnosticsBtn');
-    const overlay = document.getElementById('processingOverlay');
+    const button = getEl('runDiagnosticsBtn');
+    const overlay = getEl('processingOverlay');
+
+    if (!button || !overlay) {
+      return;
+    }
 
     if (isLoading) {
       button.disabled = true;
@@ -764,32 +849,48 @@
       button.style.cursor = 'not-allowed';
       button.innerHTML = '<i data-lucide="loader-circle" style="width:14px;height:14px;" class="animate-spin"></i> Running...';
       overlay.classList.add('active');
-      lucide.createIcons();
     } else {
       button.disabled = false;
       button.style.opacity = '1';
       button.style.cursor = 'pointer';
       button.innerHTML = '<i data-lucide="cpu" style="width:14px;height:14px;"></i> Run Diagnostics';
       overlay.classList.remove('active');
+    }
+
+    if (window.lucide) {
       lucide.createIcons();
     }
   }
 
-  function updateResultFields(diseaseName, confidenceScore, severityPct) {
-    document.getElementById('diseaseName').textContent = diseaseName;
-    document.getElementById('confidenceScore').textContent = confidenceScore;
-    document.getElementById('severityIndex').textContent = severityPct;
-    const confNum = parseFloat(confidenceScore);
-    const sevNum = parseFloat(severityPct);
-    document.getElementById('confidenceBar').style.width = Number.isFinite(confNum) ? confidenceScore : '0%';
-    document.getElementById('severityBar').style.width = Number.isFinite(sevNum) ? severityPct : '0%';
+  function updateResultFields(diseaseName, confidenceValue, severityValue) {
+    safeSetText('diseaseName', diseaseName);
+
+    const confNum = Number(confidenceValue);
+    const sevNum = Number(severityValue);
+    const confDisplay = Number.isFinite(confNum) ? `${confNum}%` : '--';
+    const sevDisplay = Number.isFinite(sevNum) ? `${sevNum}%` : '--';
+
+    safeSetText('confidenceScore', confDisplay);
+    safeSetText('severityIndex', sevDisplay);
+
+    const confidenceBar = getEl('confidenceBar');
+    if (confidenceBar) {
+      confidenceBar.style.width = Number.isFinite(confNum) ? `${Math.max(0, Math.min(100, confNum))}%` : '0%';
+    }
+
+    const severityBar = getEl('severityBar');
+    if (severityBar) {
+      severityBar.style.width = Number.isFinite(sevNum) ? `${Math.max(0, Math.min(100, sevNum))}%` : '0%';
+    }
   }
 
   async function runDiagnostics() {
-    const fileInput = document.getElementById('fileInput');
-    const file = selectedFile || fileInput.files[0];
+    console.log('Sending image to backend');
 
-    if (!fileInput.files.length && !selectedFile) {
+    const fileInput = getEl('imageUpload');
+    const file = selectedFile || fileInput?.files?.[0];
+
+    if (!fileInput || (!fileInput.files.length && !selectedFile)) {
       alert('Please upload an image first.');
       return;
     }
@@ -800,7 +901,7 @@
     setLoadingState(true);
 
     try {
-      const response = await fetch(API_URL, {
+      const response = await fetch('/predict', {
         method: 'POST',
         body: formData
       });
@@ -809,21 +910,22 @@
         throw new Error('Backend returned a non-OK response.');
       }
 
-      const data = await response.json();
-      const diseaseName = data.disease_name || 'Unknown';
-      const confidenceScore = Number(data.confidence_score);
-      const severityPct = Number(data.severity_pct);
+      const result = await response.json();
+      console.log('Prediction result:', result);
 
-      updateResultFields(
-        diseaseName,
-        Number.isFinite(confidenceScore) ? `${confidenceScore}%` : '--',
-        Number.isFinite(severityPct) ? `${severityPct}%` : '--'
-      );
-      document.getElementById('diagnosisPanel').style.display = 'block';
-      document.getElementById('actionPlan').style.display = 'block';
-      document.getElementById('metricsPanel').style.display = 'flex';
-      if (data.heatmap_url) {
-        document.getElementById('gradcamImage').src = data.heatmap_url + '?t=' + new Date().getTime();
+      const diseaseName = result.disease_name || 'Unknown';
+      const confidenceScore = Number(result.confidence_score);
+      const severityPct = Number(result.severity_pct);
+
+      updateResultFields(diseaseName, confidenceScore, severityPct);
+
+      safeSetDisplay('diagnosisPanel', 'block');
+      safeSetDisplay('actionPlan', 'block');
+      safeSetDisplay('metricsPanel', 'flex');
+
+      const gradcamImage = getEl('gradcamImage');
+      if (gradcamImage && result.heatmap_url) {
+        gradcamImage.src = result.heatmap_url + '?t=' + new Date().getTime();
       }
     } catch (error) {
       resetResultFields();
@@ -833,6 +935,14 @@
       setLoadingState(false);
     }
   }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('AgriScan UI loaded');
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+    resetResultFields();
+  });
 </script>
 
 </body>
