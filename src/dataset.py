@@ -15,7 +15,7 @@ def make_dataset_from_directory(
         data_dir,
         image_size=(img_size, img_size),  # tuple created ONLY HERE
         batch_size=batch_size,
-        label_mode="int"
+        label_mode="categorical"
     )
 
     class_names = dataset.class_names
@@ -28,8 +28,9 @@ def make_dataset_from_directory(
     if augment_data:
         data_augmentation = tf.keras.Sequential([
             tf.keras.layers.RandomFlip("horizontal"),
-            tf.keras.layers.RandomRotation(0.1),
-            tf.keras.layers.RandomZoom(0.1),
+            tf.keras.layers.RandomRotation(0.15),
+            tf.keras.layers.RandomZoom(0.2),
+            tf.keras.layers.RandomContrast(0.1),
         ])
 
         dataset = dataset.map(
