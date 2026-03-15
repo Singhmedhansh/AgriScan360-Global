@@ -269,11 +269,28 @@
         <input type="file" id="imageUpload" accept="image/*" class="hidden" onchange="handleFileSelect(event)" />
 
         <div class="flex items-center gap-2 mt-4">
-          <button id="runDiagnosticsBtn" onclick="runDiagnostics()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
+          <button id="runDiagnosticsBtn" onclick="runDiagnosis()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
             <i data-lucide="cpu" style="width:14px;height:14px;"></i>
             Run Diagnostics
           </button>
           <p class="text-xs" style="color:var(--text-muted);">Uses 1 analysis credit</p>
+        </div>
+
+        <div id="validationWarning" class="hidden mt-4 rounded-lg px-4 py-3 text-sm" style="background:var(--accent-red-light); border:1px solid #fecaca; color:var(--accent-red);"></div>
+
+        <div id="pipeline-status" class="hidden mt-4 rounded-lg px-4 py-4" style="background:var(--surface-2); border:1px solid var(--border);">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-xs" style="color:var(--text-muted);">AI PIPELINE STATUS</p>
+            <span class="mono text-[10px] px-2 py-0.5 rounded" style="background:#e5e7eb; color:#374151;">LIVE</span>
+          </div>
+          <ul class="flex flex-col gap-1.5 text-sm">
+            <li data-pipeline-step="0" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Segmenting leaf</span></li>
+            <li data-pipeline-step="1" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Running AI classifier</span></li>
+            <li data-pipeline-step="2" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Generating GradCAM</span></li>
+            <li data-pipeline-step="3" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Calculating severity</span></li>
+            <li data-pipeline-step="4" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Predicting disease risk</span></li>
+            <li data-pipeline-step="5" class="flex items-center gap-2" style="color:var(--text-secondary);"><span class="mono">⏳</span><span>Generating diagnosis report</span></li>
+          </ul>
         </div>
       </div>
 
@@ -679,6 +696,8 @@
 
 <script>
   let selectedFile = null;
+  window.userLat = null;
+  window.userLon = null;
 
   function getEl(id) {
     return document.getElementById(id);
@@ -696,6 +715,107 @@
     if (el) {
       el.style.display = displayValue;
     }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function resetPipelineStatus() {
+    const container = getEl('pipeline-status');
+    if (!container) return;
+
+    const steps = container.querySelectorAll('[data-pipeline-step]');
+    steps.forEach((stepEl) => {
+      const icon = stepEl.querySelector('span.mono');
+      if (icon) {
+        icon.textContent = '⏳';
+      }
+      stepEl.style.color = 'var(--text-secondary)';
+      stepEl.style.fontWeight = '400';
+    });
+  }
+
+  function showPipelineStatusPending() {
+    resetPipelineStatus();
+    safeSetDisplay('pipeline-status', 'block');
+  }
+
+  async function completePipelineSteps(delayMs = 250) {
+    const container = getEl('pipeline-status');
+    if (!container) {
+      return;
+    }
+
+    const steps = Array.from(container.querySelectorAll('[data-pipeline-step]'));
+    for (const stepEl of steps) {
+      await sleep(delayMs);
+      const icon = stepEl.querySelector('span.mono');
+      if (icon) {
+        icon.textContent = '✅';
+      }
+      stepEl.style.color = 'var(--text-primary)';
+      stepEl.style.fontWeight = '500';
+    }
+  }
+
+  function showValidationWarning(message) {
+    const warning = getEl('validationWarning');
+    if (!warning) return;
+    warning.textContent = message;
+    warning.classList.remove('hidden');
+  }
+
+  function hideValidationWarning() {
+    const warning = getEl('validationWarning');
+    if (!warning) return;
+    warning.textContent = '';
+    warning.classList.add('hidden');
+  }
+
+  function updateEnvironmentalPanel(data = {}) {
+    const temperature = Number(data.temperature);
+    const humidity = Number(data.humidity);
+    const windSpeed = Number(data.wind_speed);
+    const sunlight = Number(data.sunlight_hours);
+
+    safeSetText('temperatureValue', Number.isFinite(temperature) ? `${temperature}°C` : '--');
+    safeSetText('humidityValue', Number.isFinite(humidity) ? `${humidity}%` : '--');
+    safeSetText('windSpeedValue', Number.isFinite(windSpeed) ? `${windSpeed} km/h` : '--');
+    safeSetText('sunlightHoursValue', Number.isFinite(sunlight) ? `${sunlight} hrs` : '--');
+  }
+
+  function hasUserLocation() {
+    return Number.isFinite(window.userLat) && Number.isFinite(window.userLon);
+  }
+
+  function requestUserLocation() {
+    if (!navigator.geolocation) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          window.userLat = position.coords.latitude;
+          window.userLon = position.coords.longitude;
+          resolve(true);
+        },
+        () => {
+          window.userLat = null;
+          window.userLon = null;
+          resolve(false);
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+      );
+    });
+  }
+
+  async function ensureUserLocation() {
+    if (hasUserLocation()) {
+      return true;
+    }
+    return requestUserLocation();
   }
 
   function resetResultFields() {
@@ -723,6 +843,8 @@
     safeSetText('hostScientific', 'Solanum tuberosum');
     safeSetText('hostCommon', 'Potato');
     safeSetText('diseaseDescription', 'Diagnosis description will appear here after analysis.');
+    hideValidationWarning();
+    resetPipelineStatus();
 
     const confidenceBar = getEl('confidenceBar');
     if (confidenceBar) {
@@ -967,14 +1089,7 @@
       treatmentUrgencyBar.style.width = `${width}%`;
     }
 
-    const temperature = Number(result.temperature);
-    const humidity = Number(result.humidity);
-    const windSpeed = Number(result.wind_speed);
-    const sunlight = Number(result.sunlight_hours);
-    safeSetText('temperatureValue', Number.isFinite(temperature) ? `${temperature}°C` : '--');
-    safeSetText('humidityValue', Number.isFinite(humidity) ? `${humidity}%` : '--');
-    safeSetText('windSpeedValue', Number.isFinite(windSpeed) ? `${windSpeed} km/h` : '--');
-    safeSetText('sunlightHoursValue', Number.isFinite(sunlight) ? `${sunlight} hrs` : '--');
+    updateEnvironmentalPanel(result);
 
     const isHealthy = result.disease_name === 'Potato Healthy';
     const severityCard = getEl('severity-card');
@@ -985,19 +1100,47 @@
     if (chemicalTreatment) chemicalTreatment.style.display = isHealthy ? 'none' : 'block';
   }
 
-  async function runDiagnostics() {
+  function updateDashboard(result) {
+    const diseaseName = result.disease_name || 'Unknown';
+    const confidenceScore = Number(result.confidence_score);
+    const severityPct = Number(result.severity_pct);
+
+    updateResultFields(diseaseName, confidenceScore, severityPct);
+    updateDiagnosticMetadata(result);
+
+    safeSetDisplay('diagnosisPanel', 'block');
+    safeSetDisplay('actionPlan', 'block');
+    safeSetDisplay('metricsPanel', 'flex');
+
+    const gradcamImage = getEl('gradcamImage');
+    if (gradcamImage && result.heatmap_url) {
+      gradcamImage.src = result.heatmap_url + '?t=' + new Date().getTime();
+    }
+  }
+
+  async function runDiagnosis() {
     console.log('Sending image to backend');
 
     const fileInput = getEl('imageUpload');
     const file = selectedFile || fileInput?.files?.[0];
 
-    if (!fileInput || (!fileInput.files.length && !selectedFile)) {
+    if (!fileInput || !file) {
       alert('Please upload an image first.');
       return;
     }
 
+    hideValidationWarning();
+    showPipelineStatusPending();
+
     const formData = new FormData();
     formData.append('file', file);
+    const gotLocation = await ensureUserLocation();
+    if (!gotLocation || !hasUserLocation()) {
+      showValidationWarning('Location access is required for real-time weather. Please allow location and try again.');
+      return;
+    }
+    formData.append('lat', String(window.userLat));
+    formData.append('lon', String(window.userLon));
 
     setLoadingState(true);
 
@@ -1007,35 +1150,40 @@
         body: formData
       });
 
-      if (!response.ok) {
-        throw new Error('Backend returned a non-OK response.');
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        // Keep handling path for non-JSON backend failures.
       }
 
-      const result = await response.json();
+      if (result?.status === 'invalid_image') {
+        await completePipelineSteps();
+        resetResultFields();
+        showValidationWarning(result.message || 'Please upload a clear potato leaf image.');
+        return;
+      }
+
+      if (!response.ok || !result) {
+        throw new Error(result?.detail || result?.message || 'Backend returned a non-OK response.');
+      }
+
+      await completePipelineSteps();
+
       console.log('Prediction result:', result);
-
-      const diseaseName = result.disease_name || 'Unknown';
-      const confidenceScore = Number(result.confidence_score);
-      const severityPct = Number(result.severity_pct);
-
-      updateResultFields(diseaseName, confidenceScore, severityPct);
-      updateDiagnosticMetadata(result);
-
-      safeSetDisplay('diagnosisPanel', 'block');
-      safeSetDisplay('actionPlan', 'block');
-      safeSetDisplay('metricsPanel', 'flex');
-
-      const gradcamImage = getEl('gradcamImage');
-      if (gradcamImage && result.heatmap_url) {
-        gradcamImage.src = result.heatmap_url + '?t=' + new Date().getTime();
-      }
+      updateDashboard(result);
     } catch (error) {
       resetResultFields();
       updateResultFields('Prediction failed', '--', '--');
+      showValidationWarning(error.message || 'Prediction failed. Please try again.');
       console.error('Prediction failed:', error);
     } finally {
       setLoadingState(false);
     }
+  }
+
+  async function runDiagnostics() {
+    await runDiagnosis();
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -1044,6 +1192,7 @@
       lucide.createIcons();
     }
     resetResultFields();
+    requestUserLocation();
   });
 </script>
 
