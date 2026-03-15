@@ -220,50 +220,46 @@ Open: `http://127.0.0.1:8000`
 
 ```mermaid
 graph TD
-	%% Define Nodes
-	User[<img src='https://img.icons8.com/ios-filled/50/user.png' width='25'/><br/>User / Farmer]
-	Frontend[<img src='https://img.icons8.com/fluency/48/dashboard.png' width='25'/><br/>Tailwind Dashboard<br/>(webapp/templates/index.html)]
-	Backend[<img src='https://img.icons8.com/color/48/api.png' width='25'/><br/>FastAPI Backend<br/>(webapp/app.py)]
+    %% Core nodes
+    User[User or Farmer]
+    Frontend[Tailwind Dashboard\nwebapp/templates/index.html]
+    Backend[FastAPI Backend\nwebapp/app.py]
+    RiskEngine[Risk Advisory and Action Plan]
 
-	%% Define Subgraphs for ML and External API
-	subgraph ML_Pipeline [ML Inference & XAI]
-		direction TB
-		Model[<img src='https://img.icons8.com/color/48/tensorflow.png' width='25'/><br/>EfficientNetB0 Model<br/>(outputs/potato_model.keras)]
-		Segmentation[<img src='https://img.icons8.com/ios-filled/50/image.png' width='25'/><br/>HSV Leaf Segmentation<br/>(src/segmentation.py)]
-		GradCAM[<img src='https://img.icons8.com/ios-filled/50/heat-map.png' width='25'/><br/>Grad-CAM XAI<br/>(src/gradcam.py)]
-	end
+    %% ML pipeline
+    subgraph ML_Pipeline [ML Inference and XAI]
+        direction TB
+        Segmentation[HSV Leaf Segmentation\nsrc/segmentation.py]
+        Model[EfficientNetB0 Model\noutputs/potato_model.keras]
+        GradCAM[Grad-CAM XAI\nsrc/gradcam.py]
+    end
 
-	subgraph External_API [Geospatial Context]
-		OpenWeather[<img src='https://img.icons8.com/color/48/weather.png' width='25'/><br/>OpenWeather API<br/>(External Service)]
-	end
+    %% External context
+    subgraph External_API [Geospatial Context]
+        OpenWeather[OpenWeather API\nExternal Service]
+    end
 
-	%% Define Flow and Interconnections
-	User -- "1. Upload Image & Geolocation" --> Frontend
-	Frontend -- "2. POST /predict" --> Backend
+    %% End-to-end flow
+    User -- "1. Upload image and geolocation" --> Frontend
+    Frontend -- "2. POST /predict" --> Backend
+    Backend -- "3a. Preprocess image" --> Segmentation
+    Segmentation -- "ROI and mask" --> Model
+    Model -- "Classification logits" --> GradCAM
+    GradCAM -- "4a. Diagnosis and heatmap" --> Backend
+    Backend -- "3b. Fetch local weather" --> OpenWeather
+    OpenWeather -- "4b. Weather data" --> Backend
+    Backend -- "5. Enrich diagnosis" --> RiskEngine
+    RiskEngine -- "6. Return JSON response" --> Frontend
+    Frontend -- "7. Render report" --> User
 
-	%% Backend -> ML Subgraph
-	Backend -- "3a. Preprocess Image" --> Segmentation
-	Segmentation -- "ROI / Mask" --> Model
-	Model -- "Classification" --> GradCAM
-	GradCAM -- "4a. Diagnosis & Heatmap" --> Backend
+    %% Styling
+    classDef internal fill:#f4ecff,stroke:#333,stroke-width:1px;
+    classDef external fill:#e6f0ff,stroke:#1f4e8c,stroke-width:1px,stroke-dasharray: 5 5;
+    classDef model fill:#fff6cc,stroke:#6b5900,stroke-width:1px;
 
-	%% Backend -> External API Subgraph
-	Backend -- "3b. Fetch Local Weather (Lat/Lon)" --> External_API
-	External_API -- "4b. Real-time Weather Data" --> Backend
-
-	%% Backend -> Risk Enrichment -> Frontend
-	Backend -- "5. Risk Advisory & Action Plan" --> Backend
-	Backend -- "6. Return JSON Response" --> Frontend
-	Frontend -- "7. Render Report" --> User
-
-	%% Styling
-	classDef internal fill:#f9f,stroke:#333,stroke-width:2px;
-	classDef external fill:#ccf,stroke:#f66,stroke-width:2px,stroke-dasharray: 5 5;
-	classDef model fill:#ff9,stroke:#333,stroke-width:2px;
-
-	class Backend internal;
-	class OpenWeather external;
-	class Model model;
+    class Backend,Frontend,RiskEngine internal;
+    class OpenWeather external;
+    class Model model;
 ```
 
 ## Production Readiness Notes
