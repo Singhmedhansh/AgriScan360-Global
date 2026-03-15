@@ -114,6 +114,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+if not os.getenv("OPENWEATHER_API_KEY", "").strip():
+    print("Warning: OPENWEATHER_API_KEY is missing. Weather-aware metrics will fall back to base risk.")
+
 
 def compute_severity_pct(heatmap: np.ndarray) -> float:
     heatmap_arr = np.asarray(heatmap, dtype=np.float32)
@@ -238,6 +241,30 @@ def compute_treatment_urgency(risk_score: int) -> str:
     return "High"
 
 
+def compute_base_risk_score(severity_pct: float, confidence_score: float) -> int:
+    risk_score = 0
+
+    if severity_pct > 60:
+        risk_score += 5
+    elif severity_pct > 30:
+        risk_score += 4
+    elif severity_pct > 10:
+        risk_score += 3
+    elif severity_pct > 3:
+        risk_score += 2
+    else:
+        risk_score += 1
+
+    if confidence_score >= 0.80:
+        risk_score += 3
+    elif confidence_score >= 0.60:
+        risk_score += 2
+    elif confidence_score >= 0.40:
+        risk_score += 1
+
+    return min(risk_score, 10)
+
+
 if not MODEL_PATH.exists():
     raise RuntimeError(f"Model file not found: {MODEL_PATH}")
 
@@ -320,15 +347,24 @@ async def predict(
         disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Potato Healthy"])
         treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Potato Healthy"])
 
+        weather_available = True
         try:
             weather_data = get_weather(lat, lon)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail="Unable to fetch weather data for prediction.") from exc
+            print("Weather lookup fallback in /predict:", exc)
+            weather_available = False
+            weather_data = {}
 
-        temperature = float(weather_data["temperature"])
-        humidity = float(weather_data["humidity"])
-        wind_speed = float(weather_data["wind_speed"])
-        sunlight_hours = weather_data.get("sunlight_hours")
+        if weather_available:
+            temperature: float | str = float(weather_data["temperature"])
+            humidity: float | str = float(weather_data["humidity"])
+            wind_speed: float | str = float(weather_data["wind_speed"])
+            sunlight_hours: float | str | None = weather_data.get("sunlight_hours")
+        else:
+            temperature = "N/A"
+            humidity = "N/A"
+            wind_speed = "N/A"
+            sunlight_hours = "N/A"
 
         if is_healthy:
             severity_pct = 0
@@ -339,7 +375,10 @@ async def predict(
             treatment_urgency = "None"
             lesion_count = 0
         else:
-            risk_score = compute_risk_score(severity_pct, temperature, humidity)
+            if weather_available:
+                risk_score = compute_risk_score(severity_pct, float(temperature), float(humidity))
+            else:
+                risk_score = compute_base_risk_score(severity_pct, confidence)
             risk_level = classify_risk_level(risk_score)
             spread_probability = compute_spread_probability(risk_score)
             treatment_urgency = compute_treatment_urgency(risk_score)
@@ -353,12 +392,22 @@ async def predict(
         print("Raw prediction:", preds)
         print("Predicted class:", disease)
 
+        response_message_parts: list[str] = []
+        if quality_warning:
+            response_message_parts.append(quality_warning)
+        if not weather_available:
+            response_message_parts.append(
+                "Diagnosis complete. Weather data unavailable, showing base risk metrics."
+            )
+        response_message = " ".join(response_message_parts) if response_message_parts else None
+
         return JSONResponse(
             {
                 "disease_name": disease,
                 "confidence_score": round(confidence * 100, 2),
                 "status": "ok",
-                "message": quality_warning,
+                "message": response_message,
+                "weather_available": weather_available,
                 "confidence_level": confidence_level,
                 "severity_pct": severity_pct,
                 "severity_stage": severity_stage,
@@ -399,4 +448,4 @@ async def predict(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
