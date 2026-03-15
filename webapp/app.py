@@ -1,21 +1,23 @@
 from datetime import datetime
+import os
 from pathlib import Path
-import random
 import tempfile
 import time
 
 import cv2
 import numpy as np
 import pytz
+import requests
 import tensorflow as tf
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 
 from src.gradcam import generate_gradcam, overlay_heatmap
+from src.segmentation import segment_leaf as segment_leaf_with_mask
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEBAPP_DIR = BASE_DIR / "webapp"
@@ -28,6 +30,10 @@ USE_SEGMENTATION = False
 SEVERITY_HEATMAP_THRESHOLD = 0.5
 HOST_COMMON_NAME = "Potato"
 HOST_SCIENTIFIC_NAME = "Solanum tuberosum"
+OPENWEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+LEAF_PIXEL_MIN_RATIO = 0.03
+LEAF_PIXEL_MIN_ABSOLUTE = 2500
+INVALID_IMAGE_MESSAGE = "Please upload a clear potato leaf image."
 
 DISEASE_INFO = {
     "Potato Early Blight": {
@@ -147,12 +153,38 @@ def classify_confidence_level(confidence_score: float) -> str:
     return "Very High"
 
 
-def compute_environmental_data() -> tuple[int, int, int, float]:
-    temperature = random.randint(18, 32)
-    humidity = random.randint(55, 90)
-    wind_speed = random.randint(5, 20)
-    sunlight_hours = round(random.uniform(4.0, 9.0), 1)
-    return temperature, humidity, wind_speed, sunlight_hours
+def get_weather(lat: float, lon: float) -> dict[str, float | str]:
+    api_key = os.getenv("OPENWEATHER_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("OPENWEATHER_API_KEY is not configured.")
+
+    response = requests.get(
+        OPENWEATHER_API_URL,
+        params={"lat": lat, "lon": lon, "appid": api_key, "units": "metric"},
+        timeout=8,
+    )
+    response.raise_for_status()
+
+    payload = response.json()
+    temperature = float(payload["main"]["temp"])
+    humidity = float(payload["main"]["humidity"])
+    wind_speed_ms = float(payload["wind"]["speed"])
+    wind_speed_kmh = round(wind_speed_ms * 3.6, 1)
+
+    sunrise = payload.get("sys", {}).get("sunrise")
+    sunset = payload.get("sys", {}).get("sunset")
+    sunlight_hours: float | None = None
+    if isinstance(sunrise, (int, float)) and isinstance(sunset, (int, float)) and sunset > sunrise:
+        sunlight_hours = round((float(sunset) - float(sunrise)) / 3600.0, 1)
+
+    return {
+        "temperature": round(temperature, 1),
+        "humidity": round(humidity, 1),
+        "wind_speed": wind_speed_kmh,
+        "sunlight_hours": sunlight_hours,
+        "source": "openweathermap",
+        "location": payload.get("name", ""),
+    }
 
 
 def compute_risk_score(severity_pct: float, temperature: float, humidity: float) -> int:
@@ -206,37 +238,6 @@ def compute_treatment_urgency(risk_score: int) -> str:
     return "High"
 
 
-def segment_leaf(image_path: Path) -> np.ndarray:
-    img = cv2.imread(str(image_path))
-    if img is None:
-        raise ValueError(f"Could not read image for segmentation: {image_path}")
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    _, thresh = cv2.threshold(
-        blur,
-        0,
-        255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU,
-    )
-
-    contours, _ = cv2.findContours(
-        thresh,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE,
-    )
-
-    if not contours:
-        return img
-
-    largest = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest)
-    leaf = img[y : y + h, x : x + w]
-
-    return leaf
-
-
 if not MODEL_PATH.exists():
     raise RuntimeError(f"Model file not found: {MODEL_PATH}")
 
@@ -247,8 +248,22 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/weather")
+async def weather(lat: float = Query(...), lon: float = Query(...)):
+    try:
+        weather_data = get_weather(lat, lon)
+        return JSONResponse(weather_data)
+    except Exception as exc:
+        print("Weather provider error:", exc)
+        raise HTTPException(status_code=502, detail="Unable to fetch weather data.") from exc
+
+
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(
+    file: UploadFile = File(...),
+    lat: float = Form(...),
+    lon: float = Form(...),
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected")
 
@@ -260,13 +275,22 @@ async def predict(file: UploadFile = File(...)):
             temp_path = Path(temp_file.name)
             temp_file.write(await file.read())
 
-        if USE_SEGMENTATION:
-            leaf_img = segment_leaf(temp_path)
-            cv2.imwrite(str(SEGMENTED_OUTPUT_PATH), leaf_img)
-        else:
-            leaf_img = cv2.imread(str(temp_path))
-            if leaf_img is None:
-                raise ValueError(f"Could not read uploaded image: {temp_path}")
+        uploaded_img = cv2.imread(str(temp_path))
+        if uploaded_img is None:
+            raise ValueError(f"Could not read uploaded image: {temp_path}")
+
+        segmented_leaf, leaf_mask = segment_leaf_with_mask(uploaded_img)
+        leaf_pixels = int(np.sum(leaf_mask > 0))
+        min_leaf_pixels = max(LEAF_PIXEL_MIN_ABSOLUTE, int(leaf_mask.size * LEAF_PIXEL_MIN_RATIO))
+
+        quality_warning: str | None = None
+        use_segmented_leaf = USE_SEGMENTATION and leaf_pixels >= min_leaf_pixels
+        if leaf_pixels < min_leaf_pixels:
+            # Segmentation can under-detect non-uniform green leaves; continue with original image.
+            quality_warning = "Leaf segmentation confidence is low; using original image for diagnosis."
+
+        cv2.imwrite(str(SEGMENTED_OUTPUT_PATH), segmented_leaf)
+        leaf_img = segmented_leaf if use_segmented_leaf else uploaded_img
 
         leaf_img = cv2.resize(leaf_img, (224, 224))
         leaf_img = cv2.cvtColor(leaf_img, cv2.COLOR_BGR2RGB)
@@ -284,6 +308,10 @@ async def predict(file: UploadFile = File(...)):
         overlay_image = overlay_heatmap(original_image, heatmap)
         Image.fromarray(overlay_image).save(GRADCAM_OUTPUT_PATH)
 
+        max_prob = float(np.max(preds[0]))
+        if max_prob < 0.5 and quality_warning is None:
+            quality_warning = "Model confidence is low for this image; results may be less reliable."
+
         class_idx = int(np.argmax(preds))
         confidence = float(preds[0][class_idx])
         confidence_level = classify_confidence_level(confidence)
@@ -292,7 +320,15 @@ async def predict(file: UploadFile = File(...)):
         disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Potato Healthy"])
         treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Potato Healthy"])
 
-        temperature, humidity, wind_speed, sunlight_hours = compute_environmental_data()
+        try:
+            weather_data = get_weather(lat, lon)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Unable to fetch weather data for prediction.") from exc
+
+        temperature = float(weather_data["temperature"])
+        humidity = float(weather_data["humidity"])
+        wind_speed = float(weather_data["wind_speed"])
+        sunlight_hours = weather_data.get("sunlight_hours")
 
         if is_healthy:
             severity_pct = 0
@@ -321,6 +357,8 @@ async def predict(file: UploadFile = File(...)):
             {
                 "disease_name": disease,
                 "confidence_score": round(confidence * 100, 2),
+                "status": "ok",
+                "message": quality_warning,
                 "confidence_level": confidence_level,
                 "severity_pct": severity_pct,
                 "severity_stage": severity_stage,
@@ -344,9 +382,13 @@ async def predict(file: UploadFile = File(...)):
                 "description": disease_info["description"],
                 "lesion_count": lesion_count,
                 "treatment_plan": treatment_plan,
+                "leaf_pixels": leaf_pixels,
+                "min_leaf_pixels": min_leaf_pixels,
                 "heatmap_url": "/static/gradcam_result.png",
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         print("Prediction error:", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -357,4 +399,4 @@ async def predict(file: UploadFile = File(...)):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
