@@ -252,12 +252,15 @@ graph TD
     RiskEngine -- "6. Return JSON response" --> Frontend
     Frontend -- "7. Render report" --> User
 
-    %% Styling
-    classDef internal fill:#f4ecff,stroke:#333,stroke-width:1px;
-    classDef external fill:#e6f0ff,stroke:#1f4e8c,stroke-width:1px,stroke-dasharray: 5 5;
-    classDef model fill:#fff6cc,stroke:#6b5900,stroke-width:1px;
+    %% Styling tuned for GitHub dark theme readability
+    classDef default fill:#111827,stroke:#9ca3af,stroke-width:1.4px,color:#f9fafb;
+    classDef internal fill:#1f2937,stroke:#93c5fd,stroke-width:1.6px,color:#f9fafb;
+    classDef external fill:#0b2239,stroke:#60a5fa,stroke-width:1.6px,stroke-dasharray: 5 5,color:#e5f3ff;
+    classDef model fill:#3f3100,stroke:#facc15,stroke-width:1.8px,color:#fff7cc;
+    classDef actor fill:#14532d,stroke:#86efac,stroke-width:1.6px,color:#ecfdf5;
 
-    class Backend,Frontend,RiskEngine internal;
+    class User actor;
+    class Backend,Frontend,RiskEngine,Segmentation,GradCAM internal;
     class OpenWeather external;
     class Model model;
 ```
