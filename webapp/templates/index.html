@@ -372,7 +372,7 @@
             <p class="mono text-xs mb-1" style="color:var(--text-muted);">TREATMENT PROTOCOL</p>
             <h2 class="font-semibold text-base" style="color:var(--text-primary);">Action Plan</h2>
           </div>
-          <span class="mono text-xs px-2.5 py-1 rounded-full" style="background:var(--accent-blue-light); color:var(--accent-blue);">3 SECTIONS</span>
+          <span id="treatment-sections-badge" class="mono text-xs px-2.5 py-1 rounded-full" style="background:var(--accent-blue-light); color:var(--accent-blue);">3 SECTIONS</span>
         </div>
 
         <div class="divide-y" style="--tw-divide-opacity:1;">
@@ -384,9 +384,9 @@
                 <i data-lucide="zap" style="width:13px;height:13px;color:#dc2626;"></i>
               </div>
               <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Immediate</h3>
-              <span class="mono text-xs px-2 py-0.5 rounded" style="background:#fee2e2;color:#dc2626;">URGENT · 0–24 HRS</span>
+              <span id="immediate-urgency-badge" class="mono text-xs px-2 py-0.5 rounded" style="background:#fee2e2;color:#dc2626;">URGENT · 0–24 HRS</span>
             </div>
-            <div class="flex flex-col gap-3">
+            <div id="immediate-actions" class="flex flex-col gap-3">
               <label class="flex items-start gap-3 cursor-pointer group">
                 <input type="checkbox" class="mt-0.5 rounded" style="accent-color:var(--accent-green); width:15px;height:15px;flex-shrink:0;" />
                 <div>
@@ -432,7 +432,7 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y" style="--tw-divide-color:var(--border);">
-                  <tr>
+                  <tr id="chemical-row-template">
                     <td class="px-4 py-3 font-medium" style="color:var(--text-primary);">Mancozeb 75 WP</td>
                     <td class="px-4 py-3" style="color:var(--text-secondary);">2.5 kg/ha</td>
                     <td class="px-4 py-3" style="color:var(--text-secondary);">7 days</td>
@@ -468,7 +468,7 @@
               <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Prevention</h3>
               <span class="mono text-xs px-2 py-0.5 rounded" style="background:var(--accent-green-light);color:var(--accent-green);">LONG-TERM</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div id="prevention-actions" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
                 <i data-lucide="rotate-ccw" style="width:14px;height:14px;color:var(--accent-green);flex-shrink:0;margin-top:2px;"></i>
                 <div>
@@ -1100,6 +1100,115 @@
     if (chemicalTreatment) chemicalTreatment.style.display = isHealthy ? 'none' : 'block';
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function buildImmediateActionsHtml(actions) {
+    if (!Array.isArray(actions) || actions.length === 0) {
+      return `
+        <p class="text-sm" style="color:var(--text-muted);">No immediate actions required.</p>
+      `;
+    }
+
+    return actions.map((action) => {
+      const title = escapeHtml(action);
+      return `
+        <label class="flex items-start gap-3 cursor-pointer group">
+          <input type="checkbox" class="mt-0.5 rounded" style="accent-color:var(--accent-green); width:15px;height:15px;flex-shrink:0;" />
+          <div>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">${title}</p>
+          </div>
+        </label>
+      `;
+    }).join('');
+  }
+
+  function buildChemicalRowsHtml(chemical) {
+    if (!Array.isArray(chemical) || chemical.length === 0) {
+      return `
+        <tr>
+          <td colspan="4" class="px-4 py-3 text-sm" style="color:var(--text-muted);">No chemical treatment recommended.</td>
+        </tr>
+      `;
+    }
+
+    return chemical.map((item, index) => {
+      const rowStyle = index % 2 === 1 ? 'background:var(--surface-2);' : '';
+      const fungicide = escapeHtml(item?.fungicide || '--');
+      const rate = escapeHtml(item?.rate || '--');
+      const interval = escapeHtml(item?.interval || '--');
+      const phi = escapeHtml(item?.phi || '--');
+      return `
+        <tr style="${rowStyle}">
+          <td class="px-4 py-3 font-medium" style="color:var(--text-primary);">${fungicide}</td>
+          <td class="px-4 py-3" style="color:var(--text-secondary);">${rate}</td>
+          <td class="px-4 py-3" style="color:var(--text-secondary);">${interval}</td>
+          <td class="px-4 py-3 mono text-xs" style="color:var(--accent-amber);">${phi}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function buildPreventionActionsHtml(actions) {
+    if (!Array.isArray(actions) || actions.length === 0) {
+      return `
+        <p class="text-sm" style="color:var(--text-muted);">No prevention guidance available.</p>
+      `;
+    }
+
+    return actions.map((action) => {
+      const text = escapeHtml(action);
+      return `
+        <div class="flex items-start gap-3 rounded-lg p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+          <i data-lucide="shield-check" style="width:14px;height:14px;color:var(--accent-green);flex-shrink:0;margin-top:2px;"></i>
+          <div>
+            <p class="text-sm font-medium" style="color:var(--text-primary);">${text}</p>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateTreatmentPlan(result) {
+    const treatmentPlan = result?.treatment_plan || {};
+    const immediateActions = getEl('immediate-actions');
+    const preventionActions = getEl('prevention-actions');
+    const chemicalTableBody = document.querySelector('#chemical-treatment tbody');
+    const immediateUrgencyBadge = getEl('immediate-urgency-badge');
+    const treatmentSectionsBadge = getEl('treatment-sections-badge');
+    const isHealthy = result?.disease_name === 'Potato Healthy';
+
+    if (immediateActions) {
+      immediateActions.innerHTML = buildImmediateActionsHtml(treatmentPlan.immediate);
+    }
+
+    if (chemicalTableBody) {
+      chemicalTableBody.innerHTML = buildChemicalRowsHtml(treatmentPlan.chemical);
+    }
+
+    if (preventionActions) {
+      preventionActions.innerHTML = buildPreventionActionsHtml(treatmentPlan.prevention);
+    }
+
+    if (immediateUrgencyBadge) {
+      immediateUrgencyBadge.style.display = isHealthy ? 'none' : 'inline-block';
+    }
+
+    if (treatmentSectionsBadge) {
+      treatmentSectionsBadge.textContent = isHealthy ? '2 SECTIONS' : '3 SECTIONS';
+    }
+
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+  }
+
   function updateDashboard(result) {
     const diseaseName = result.disease_name || 'Unknown';
     const confidenceScore = Number(result.confidence_score);
@@ -1107,6 +1216,7 @@
 
     updateResultFields(diseaseName, confidenceScore, severityPct);
     updateDiagnosticMetadata(result);
+    updateTreatmentPlan(result);
 
     safeSetDisplay('diagnosisPanel', 'block');
     safeSetDisplay('actionPlan', 'block');
