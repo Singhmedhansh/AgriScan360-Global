@@ -36,22 +36,22 @@ LEAF_PIXEL_MIN_ABSOLUTE = 2500
 INVALID_IMAGE_MESSAGE = "Please upload a clear potato leaf image."
 
 DISEASE_INFO = {
-    "Potato Early Blight": {
+    "Early_Blight": {
         "pathogen": "Alternaria solani",
         "description": "Early blight is a fungal disease of potato that produces concentric target-like lesions on leaves.",
     },
-    "Potato Late Blight": {
+    "Late_Blight": {
         "pathogen": "Phytophthora infestans",
         "description": "Late blight is a destructive oomycete disease causing rapidly expanding water-soaked lesions.",
     },
-    "Potato Healthy": {
+    "Healthy": {
         "pathogen": "None detected",
         "description": "Leaf tissue appears healthy with no visible disease symptoms.",
     },
 }
 
 TREATMENT_PROTOCOLS = {
-    "Potato Late Blight": {
+    "Late_Blight": {
         "immediate": [
             "Remove and destroy infected foliage",
             "Isolate affected plants from healthy stock",
@@ -69,7 +69,7 @@ TREATMENT_PROTOCOLS = {
             "Improve soil drainage",
         ],
     },
-    "Potato Early Blight": {
+    "Early_Blight": {
         "immediate": [
             "Remove severely infected leaves",
             "Apply protective fungicide spray",
@@ -85,7 +85,7 @@ TREATMENT_PROTOCOLS = {
             "Practice crop rotation",
         ],
     },
-    "Potato Healthy": {
+    "Healthy": {
         "immediate": [
             "No disease detected",
             "Continue monitoring crop health",
@@ -97,13 +97,37 @@ TREATMENT_PROTOCOLS = {
             "Inspect crops regularly",
         ],
     },
+    "Fungi": {
+        "fungicides": ["Carbendazim 1g/L", "Propiconazole 1ml/L"],
+        "interval": "Every 7 days",
+        "phi": "14 days",
+        "immediate": ["Remove and destroy infected plant material", "Improve air circulation between plants"],
+        "prevention": ["Avoid overhead irrigation", "Practice crop rotation", "Use certified disease-free seed"]
+    },
+    "Bacteria": {
+        "fungicides": ["Copper oxychloride 3g/L", "Streptomycin sulfate 0.5g/L"],
+        "interval": "Every 10 days",
+        "phi": "21 days",
+        "immediate": ["Remove infected plants immediately", "Avoid working in field when wet"],
+        "prevention": ["Use disease-free certified seed", "Avoid waterlogging", "Disinfect tools between rows"]
+    },
+    "Pest": {
+        "fungicides": ["Imidacloprid 0.5ml/L", "Spinosad 1ml/L"],
+        "interval": "Inspect weekly, spray only when threshold exceeded",
+        "phi": "7 days",
+        "immediate": ["Manual removal of visible pests", "Install yellow sticky traps"],
+        "prevention": ["Intercrop with marigold", "Avoid excess nitrogen fertilization"]
+    },
+    "Virus": {
+        "fungicides": ["No curative chemical — remove infected plants", "Imidacloprid 0.5ml/L for aphid vector control"],
+        "interval": "Monitor weekly",
+        "phi": "N/A",
+        "immediate": ["Uproot and destroy infected plants immediately to prevent spread"],
+        "prevention": ["Use certified virus-free seed", "Control aphids early in season", "Remove weed hosts around field"]
+    },
 }
 
-class_names = [
-    "Potato Early Blight",
-    "Potato Healthy",
-    "Potato Late Blight",
-]
+CLASS_NAMES = ['Early_Blight', 'Late_Blight', 'Healthy', 'Fungi', 'Bacteria', 'Pest', 'Virus']
 
 app = FastAPI()
 
@@ -190,7 +214,7 @@ def get_weather(lat: float, lon: float) -> dict[str, float | str]:
     }
 
 
-def compute_risk_score(severity_pct: float, temperature: float, humidity: float) -> int:
+def compute_risk_score(severity_pct: float, temperature: float, humidity: float, disease_class: str | None = None) -> int:
     risk_score = 0
 
     if severity_pct > 60:
@@ -205,7 +229,18 @@ def compute_risk_score(severity_pct: float, temperature: float, humidity: float)
     elif humidity > 60:
         risk_score += 2
 
+    # Late_Blight / Phytophthora window (cool + wet)
     if 10 <= temperature <= 24:
+        risk_score += 2
+
+    # Class-specific weather windows
+    if disease_class == "Bacteria" and 25 <= temperature <= 35 and humidity > 80:
+        risk_score += 2
+    elif disease_class == "Virus" and 20 <= temperature <= 30:
+        risk_score += 2
+    elif disease_class == "Pest" and 20 <= temperature <= 35:
+        risk_score += 2
+    elif disease_class == "Fungi" and 20 <= temperature <= 28 and humidity > 75:
         risk_score += 2
 
     return min(risk_score, 10)
@@ -342,10 +377,10 @@ async def predict(
         class_idx = int(np.argmax(preds))
         confidence = float(preds[0][class_idx])
         confidence_level = classify_confidence_level(confidence)
-        disease = class_names[class_idx]
-        is_healthy = disease == "Potato Healthy"
-        disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Potato Healthy"])
-        treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Potato Healthy"])
+        disease = CLASS_NAMES[class_idx]
+        is_healthy = disease == "Healthy"
+        disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Healthy"])
+        treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Healthy"])
 
         weather_available = True
         try:
@@ -376,7 +411,7 @@ async def predict(
             lesion_count = 0
         else:
             if weather_available:
-                risk_score = compute_risk_score(severity_pct, float(temperature), float(humidity))
+                risk_score = compute_risk_score(severity_pct, float(temperature), float(humidity), disease)
             else:
                 risk_score = compute_base_risk_score(severity_pct, confidence)
             risk_level = classify_risk_level(risk_score)

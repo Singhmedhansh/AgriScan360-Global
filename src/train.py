@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--data_dir", type=str, default="data")
     parser.add_argument("--img_size", type=int, default=224)  # INT ONLY
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=15)
+    parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--fine_tune_epochs", type=int, default=10)
     parser.add_argument("--base", type=str, default="EfficientNetB0")
     parser.add_argument("--lr", type=float, default=3e-4)
