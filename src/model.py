@@ -1,9 +1,12 @@
 # src/model.py
+NUM_CLASSES = 7
+CLASS_NAMES = ['Early_Blight', 'Late_Blight', 'Healthy', 'Fungi', 'Bacteria', 'Pest', 'Virus']
+
 import tensorflow as tf
 from tensorflow.keras.applications import EfficientNetB0
 
 
-def build_model(num_classes, base="EfficientNetB0", lr=3e-4):
+def build_model(num_classes=NUM_CLASSES, base="EfficientNetB0", lr=4e-6):
     if base != "EfficientNetB0":
         raise ValueError("Unsupported model. Use 'EfficientNetB0'.")
 
@@ -21,7 +24,7 @@ def build_model(num_classes, base="EfficientNetB0", lr=3e-4):
     x = tf.keras.layers.Dropout(0.4)(x)
     x = tf.keras.layers.Dense(128, activation="relu")(x)
     x = tf.keras.layers.Dropout(0.3)(x)
-    outputs = tf.keras.layers.Dense(num_classes, activation="softmax")(x)
+    outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax")(x)
     model = tf.keras.Model(inputs=base_model.input, outputs=outputs)
     model.base_model = base_model
 
