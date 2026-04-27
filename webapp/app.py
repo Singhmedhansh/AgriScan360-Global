@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 
+from src.constants import CLASS_NAMES, NUM_CLASSES
 from src.gradcam import generate_gradcam, overlay_heatmap
 from src.segmentation import segment_leaf as segment_leaf_with_mask
 
@@ -23,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 WEBAPP_DIR = BASE_DIR / "webapp"
 STATIC_DIR = WEBAPP_DIR / "static"
 TEMPLATES_DIR = WEBAPP_DIR / "templates"
-MODEL_PATH = BASE_DIR / "outputs" / "potato_model.keras"
+MODEL_PATH = BASE_DIR / "outputs" / "potato_model_v2.keras"
 GRADCAM_OUTPUT_PATH = STATIC_DIR / "gradcam_result.png"
 SEGMENTED_OUTPUT_PATH = STATIC_DIR / "segmented_leaf.png"
 USE_SEGMENTATION = False
@@ -36,55 +37,75 @@ LEAF_PIXEL_MIN_ABSOLUTE = 2500
 INVALID_IMAGE_MESSAGE = "Please upload a clear potato leaf image."
 
 DISEASE_INFO = {
-    "Early_Blight": {
-        "pathogen": "Alternaria solani",
-        "description": "Early blight is a fungal disease of potato that produces concentric target-like lesions on leaves.",
-    },
-    "Late_Blight": {
-        "pathogen": "Phytophthora infestans",
-        "description": "Late blight is a destructive oomycete disease causing rapidly expanding water-soaked lesions.",
-    },
+    # ===== v3: re-enable when field-domain blight data is sourced =====
+    # "Early_Blight": {
+    #     "pathogen": "Alternaria solani",
+    #     "description": "Early blight is a fungal disease of potato that produces concentric target-like lesions on leaves.",
+    # },
+    # "Late_Blight": {
+    #     "pathogen": "Phytophthora infestans",
+    #     "description": "Late blight is a destructive oomycete disease causing rapidly expanding water-soaked lesions.",
+    # },
+    # ===================================================================
     "Healthy": {
         "pathogen": "None detected",
         "description": "Leaf tissue appears healthy with no visible disease symptoms.",
     },
+    "Fungi": {
+        "pathogen": "Fungal pathogen group",
+        "description": "Foliar symptoms consistent with a fungal infection. Specific species identification requires laboratory confirmation.",
+    },
+    "Bacteria": {
+        "pathogen": "Bacterial pathogen group",
+        "description": "Foliar symptoms consistent with bacterial infection. Specific species identification requires laboratory confirmation.",
+    },
+    "Pest": {
+        "pathogen": "Insect pest damage",
+        "description": "Foliar damage consistent with insect feeding or oviposition. Specific pest identification requires visual inspection of the plant.",
+    },
+    "Virus": {
+        "pathogen": "Viral pathogen group",
+        "description": "Foliar symptoms consistent with viral infection. Specific virus identification requires laboratory confirmation (e.g., ELISA or PCR).",
+    },
 }
 
 TREATMENT_PROTOCOLS = {
-    "Late_Blight": {
-        "immediate": [
-            "Remove and destroy infected foliage",
-            "Isolate affected plants from healthy stock",
-            "Improve canopy airflow to reduce humidity",
-        ],
-        "chemical": [
-            {"fungicide": "Mancozeb 75 WP", "rate": "2.5 kg/ha", "interval": "7 days", "phi": "5 days"},
-            {"fungicide": "Chlorothalonil 720 SC", "rate": "1.5 L/ha", "interval": "10 days", "phi": "7 days"},
-            {"fungicide": "Azoxystrobin 23 SC", "rate": "1.0 L/ha", "interval": "14 days", "phi": "3 days"},
-        ],
-        "prevention": [
-            "Practice crop rotation with non-solanaceous crops",
-            "Use drip irrigation instead of overhead watering",
-            "Plant resistant potato varieties",
-            "Improve soil drainage",
-        ],
-    },
-    "Early_Blight": {
-        "immediate": [
-            "Remove severely infected leaves",
-            "Apply protective fungicide spray",
-            "Reduce plant stress with balanced fertilization",
-        ],
-        "chemical": [
-            {"fungicide": "Chlorothalonil", "rate": "1.5 L/ha", "interval": "7 days", "phi": "5 days"},
-            {"fungicide": "Azoxystrobin", "rate": "1.0 L/ha", "interval": "10 days", "phi": "3 days"},
-        ],
-        "prevention": [
-            "Maintain proper plant nutrition",
-            "Use certified disease-free seed tubers",
-            "Practice crop rotation",
-        ],
-    },
+    # ===== v3: re-enable when field-domain blight data is sourced =====
+    # "Late_Blight": {
+    #     "immediate": [
+    #         "Remove and destroy infected foliage",
+    #         "Isolate affected plants from healthy stock",
+    #         "Improve canopy airflow to reduce humidity",
+    #     ],
+    #     "chemical": [
+    #         {"fungicide": "Mancozeb 75 WP", "rate": "2.5 kg/ha", "interval": "7 days", "phi": "5 days"},
+    #         {"fungicide": "Chlorothalonil 720 SC", "rate": "1.5 L/ha", "interval": "10 days", "phi": "7 days"},
+    #         {"fungicide": "Azoxystrobin 23 SC", "rate": "1.0 L/ha", "interval": "14 days", "phi": "3 days"},
+    #     ],
+    #     "prevention": [
+    #         "Practice crop rotation with non-solanaceous crops",
+    #         "Use drip irrigation instead of overhead watering",
+    #         "Plant resistant potato varieties",
+    #         "Improve soil drainage",
+    #     ],
+    # },
+    # "Early_Blight": {
+    #     "immediate": [
+    #         "Remove severely infected leaves",
+    #         "Apply protective fungicide spray",
+    #         "Reduce plant stress with balanced fertilization",
+    #     ],
+    #     "chemical": [
+    #         {"fungicide": "Chlorothalonil", "rate": "1.5 L/ha", "interval": "7 days", "phi": "5 days"},
+    #         {"fungicide": "Azoxystrobin", "rate": "1.0 L/ha", "interval": "10 days", "phi": "3 days"},
+    #     ],
+    #     "prevention": [
+    #         "Maintain proper plant nutrition",
+    #         "Use certified disease-free seed tubers",
+    #         "Practice crop rotation",
+    #     ],
+    # },
+    # ===================================================================
     "Healthy": {
         "immediate": [
             "No disease detected",
@@ -126,8 +147,6 @@ TREATMENT_PROTOCOLS = {
         "prevention": ["Use certified virus-free seed", "Control aphids early in season", "Remove weed hosts around field"]
     },
 }
-
-CLASS_NAMES = ['Early_Blight', 'Late_Blight', 'Healthy', 'Fungi', 'Bacteria', 'Pest', 'Virus']
 
 app = FastAPI()
 
@@ -301,9 +320,18 @@ def compute_base_risk_score(severity_pct: float, confidence_score: float) -> int
 
 
 if not MODEL_PATH.exists():
-    raise RuntimeError(f"Model file not found: {MODEL_PATH}")
-
-model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    print(
+        f"Warning: model file not found at {MODEL_PATH}. "
+        "The /predict endpoint will return 503 until the v2 model is trained."
+    )
+    model = None
+else:
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    assert model.output_shape[-1] == NUM_CLASSES, (
+        f"Model head mismatch: expected {NUM_CLASSES} classes "
+        f"(from src.constants.CLASS_NAMES), got {model.output_shape[-1]}. "
+        f"Did you load the wrong .keras file?"
+    )
 
 @app.get("/")
 async def index(request: Request):
@@ -326,6 +354,12 @@ async def predict(
     lat: float = Form(...),
     lon: float = Form(...),
 ):
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model not loaded. Train the v2 model and place it at {MODEL_PATH}.",
+        )
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected")
 

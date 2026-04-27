@@ -191,7 +191,7 @@
       <i data-lucide="flask-conical" style="width:12px;height:12px;"></i>
       <span>PLANT PATHOLOGY DIAGNOSTICS — LAB REPORT v2.4</span>
     </div>
-    <h1 class="serif text-3xl font-medium" style="color:var(--text-primary); letter-spacing:-0.03em;">Disease Analysis Report</h1>
+    <h1 class="serif text-3xl font-medium" style="color:var(--text-primary); letter-spacing:-0.03em;">Pathogen Group Analysis Report</h1>
     <p class="text-sm mt-1" style="color:var(--text-secondary);">Upload a leaf specimen to receive AI-powered phytopathological analysis</p>
   </div>
 
@@ -349,8 +349,8 @@
 
       <div class="fade-up fade-up-3 rounded-xl mt-6" style="background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
         <div class="px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
-          <p class="mono text-xs mb-1" style="color:var(--text-muted);">AI DISEASE LOCALIZATION</p>
-          <h3 class="font-semibold text-base" style="color:var(--text-primary);">AI Disease Localization</h3>
+          <p class="mono text-xs mb-1" style="color:var(--text-muted);">AI PATHOGEN LOCALIZATION</p>
+          <h3 class="font-semibold text-base" style="color:var(--text-primary);">AI Pathogen Localization</h3>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-5">
           <div>
@@ -1091,7 +1091,7 @@
 
     updateEnvironmentalPanel(result);
 
-    const isHealthy = result.disease_name === 'Potato Healthy';
+    const isHealthy = result.disease_name === 'Healthy';
     const severityCard = getEl('severity-card');
     const riskCard = getEl('risk-card');
     const chemicalTreatment = getEl('chemical-treatment');
@@ -1182,7 +1182,7 @@
     const chemicalTableBody = document.querySelector('#chemical-treatment tbody');
     const immediateUrgencyBadge = getEl('immediate-urgency-badge');
     const treatmentSectionsBadge = getEl('treatment-sections-badge');
-    const isHealthy = result?.disease_name === 'Potato Healthy';
+    const isHealthy = result?.disease_name === 'Healthy';
 
     if (immediateActions) {
       immediateActions.innerHTML = buildImmediateActionsHtml(treatmentPlan.immediate);
