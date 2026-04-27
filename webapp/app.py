@@ -319,14 +319,31 @@ def compute_base_risk_score(severity_pct: float, confidence_score: float) -> int
     return min(risk_score, 10)
 
 
-if not MODEL_PATH.exists():
+model_path_keras = MODEL_PATH
+model_path_h5 = Path(str(MODEL_PATH).replace('.keras', '.h5'))
+
+if not model_path_keras.exists() and not model_path_h5.exists():
     print(
-        f"Warning: model file not found at {MODEL_PATH}. "
+        f"Warning: model file not found at {model_path_keras} or {model_path_h5}. "
         "The /predict endpoint will return 503 until the v2 model is trained."
     )
     model = None
 else:
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    model = None
+    if model_path_keras.exists():
+        try:
+            model = tf.keras.models.load_model(model_path_keras, compile=False)
+            print(f"Loaded model from {model_path_keras}")
+        except (ValueError, OSError) as e:
+            print(f"Failed to load .keras format: {e}")
+            print(f"Falling back to HDF5: {model_path_h5}")
+    if model is None:
+        if not model_path_h5.exists():
+            raise RuntimeError(
+                f"Could not load {model_path_keras} and HDF5 fallback {model_path_h5} is missing."
+            )
+        model = tf.keras.models.load_model(model_path_h5, compile=False)
+        print(f"Loaded model from {model_path_h5}")
     assert model.output_shape[-1] == NUM_CLASSES, (
         f"Model head mismatch: expected {NUM_CLASSES} classes "
         f"(from src.constants.CLASS_NAMES), got {model.output_shape[-1]}. "

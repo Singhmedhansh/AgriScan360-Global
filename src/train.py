@@ -77,11 +77,26 @@ def main():
         restore_best_weights=True
     )
 
-    # Save best model automatically
-    checkpoint = ModelCheckpoint(
+    # Save best model automatically.
+    # Hand-rolled to dodge a Keras 2.13 ModelCheckpoint bug: it forwards
+    # `options=None` to model.save(), which the native .keras saver rejects.
+    class _BestModelSaver(tf.keras.callbacks.Callback):
+        def __init__(self, filepath, monitor):
+            super().__init__()
+            self.filepath = filepath
+            self.monitor = monitor
+            self.best = -np.inf
+        def on_epoch_end(self, epoch, logs=None):
+            cur = (logs or {}).get(self.monitor)
+            if cur is None or cur <= self.best:
+                return
+            self.best = cur
+            self.model.save(self.filepath)
+            print(f"\nEpoch {epoch+1}: {self.monitor} improved to {cur:.4f}, saved {self.filepath}")
+
+    checkpoint = _BestModelSaver(
         os.path.join(args.output_dir, args.model_filename),
         monitor="val_accuracy",
-        save_best_only=True
     )
 
     history = model.fit(
@@ -127,6 +142,13 @@ def main():
     model.save(model_path)
 
     print(f"Model saved to {model_path}")
+
+    # Belt-and-suspenders: also save HDF5. The .keras native format has a
+    # known Keras 2.13 bug deserializing Normalization layers inside
+    # EfficientNet backbones; HDF5 doesn't.
+    h5_path = model_path.replace('.keras', '.h5')
+    model.save(h5_path)
+    print(f"Model also saved to {h5_path} for compatibility")
 
 
 if __name__ == "__main__":
