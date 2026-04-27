@@ -51,10 +51,16 @@ This gives robust preprocessing under non-lab image conditions and attempts to i
 
 - Input resized to `224 x 224` and converted to RGB.
 - Pixel scale intentionally kept in `[0, 255]` to match training preprocessing.
-- Model outputs class probabilities for:
-	- `Potato Early Blight`
-	- `Potato Healthy`
-	- `Potato Late Blight`
+- Model outputs class probabilities for the v2 5-class pathogen-group classifier:
+	- `Healthy`
+	- `Fungi`
+	- `Bacteria`
+	- `Pest`
+	- `Virus`
+
+The canonical class list lives in `src/constants.py` and is the single source of truth for `src/dataset.py`, `src/model.py`, `src/train.py`, and `webapp/app.py`. See `outputs/dataset_report/manifest.json` for the v2 staging audit.
+
+Note: `Early_Blight` and `Late_Blight` (the v1 potato-specific classes) were dropped in v2 because the only available training data for them is lab-domain (PlantVillage-style grey concrete backgrounds) which produced a fatal background-shortcut when mixed with the field-domain pathogen-group images. They are queued for v3 once field-domain blight data is sourced; placeholder entries remain commented out in `webapp/app.py` `DISEASE_INFO` and `TREATMENT_PROTOCOLS` for trivial restoration.
 
 Architecture notes (`src/model.py`):
 
@@ -118,7 +124,7 @@ The API returns `treatment_plan` with sections:
 - `chemical`: fungicide table with rate / interval / PHI
 - `prevention`: long-term agronomic prevention strategy
 
-For `Potato Healthy`, severity/risk outputs are neutralized and treatment sections adapt accordingly.
+For `Healthy`, severity/risk outputs are neutralized and treatment sections adapt accordingly.
 
 ## UI/UX Highlights
 
@@ -212,9 +218,58 @@ Open: `http://127.0.0.1:8000`
 
 ## Model Artifacts
 
-- Trained model path: `outputs/potato_model.keras`
-- Grad-CAM output image: `webapp/static/gradcam_result.png`
-- Segmented leaf preview: `webapp/static/segmented_leaf.png`
+- Trained model paths (v2): `outputs/potato_model_v2.keras` (preferred) and `outputs/potato_model_v2.h5` (fallback). `webapp/app.py` tries `.keras` first and falls back to `.h5` automatically — see "Known Limitations" below for why both formats are saved.
+- Grad-CAM output image: `webapp/static/gradcam_result.png` (regenerated per `/predict` call, not tracked in git).
+- Segmented leaf preview: `webapp/static/segmented_leaf.png` (regenerated per `/predict` call, not tracked in git).
+
+## Setup (v2)
+
+**Python 3.11 is required.** TensorFlow 2.13 has no wheels for Python 3.13; using 3.13 will trip a `protobuf.runtime_version` import error.
+
+```bash
+# 1. Create a Python 3.11 venv at repo root
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1   # Windows PowerShell
+# source .venv/bin/activate    # macOS/Linux
+
+# 2. Install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 3. (Optional) Stage the dataset
+python outputs/dataset_report/_stage_dataset_v2.py --proceed-no-supplement
+
+# 4. Train the v2 model
+python -m src.train
+
+# 5. Configure OpenWeather API key
+setx OPENWEATHER_API_KEY "your_key"   # Windows; reopen terminal after setx
+
+# 6. Run the FastAPI app
+python webapp\app.py
+```
+
+## Evaluation
+
+Run the held-out validation set against the trained model:
+
+```bash
+python -m src.evaluate \
+  --model_path outputs/potato_model_v2.h5 \
+  --data_dir plant_dataset_staging/_val
+```
+
+This prints a per-class classification report, a confusion matrix, and writes `outputs/eval/confusion_matrix.png`.
+
+## Known Limitations (v2.2.2)
+
+- **Macro F1 = 0.74** on the v2 validation split (397 images across 5 classes).
+- **Per-class F1**: Bacteria 0.91 (strongest), Fungi 0.74, Healthy 0.71, Pest 0.66, Virus 0.66 (weakest).
+- **Virus recall is only 51%** — viral foliar symptoms overlap visually with other pathogen groups; this is the class most likely to be misdiagnosed in the field. Treat virus predictions with extra skepticism and confirm via lab (ELISA / PCR).
+- **`Early_Blight` and `Late_Blight` are not detected by v2.** They are queued for v3 once field-domain blight training data is sourced. The v1 lab-domain potato images were dropped because mixing them with the field-domain v2 images produced a fatal background-shortcut.
+- **Healthy is the smallest class** (199 images, vs Fungi 743). Class weights and augmentation partially compensate, but Healthy recall benefits most from additional field-shot supplementary data — see `outputs/dataset_report/manifest.json` `v2_1_followup_note`.
+- **Keras 2.13 `.keras` deserialization bug**: the native `.keras` saved model fails to load with a `Layer 'normalization' expected 3 variables, but received 0` error due to a known issue with EfficientNet's internal `Normalization` layer state. `src/train.py` therefore saves both `.keras` (preferred) and `.h5` (fallback) on every run, and `webapp/app.py` tries `.keras` first then falls back to `.h5` automatically. Do not delete the `.h5` file.
+- **DISEASE_INFO entries for Fungi / Bacteria / Pest / Virus are generic placeholders** (e.g., "Fungal pathogen group — specific species identification requires laboratory confirmation"). They do not name specific pathogens. v3 should refine these with field-validated species when available.
 
 ## High-Level Architecture Diagram
 

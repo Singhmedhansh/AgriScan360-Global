@@ -1,25 +1,40 @@
-venv/
+# Python
 __pycache__/
-.vscode/
-outputs/
-models/
-data/
-.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
-*.h5
-*.ckpt
-*.pb
-.DS_Store
+.venv/
+venv/
 env/
 ENV/
 env.bak/
 venv.bak/
-__MACOSX/
-*.log
-*.sqlite3
+.pytest_cache/
 .ipynb_checkpoints/
+
+# Datasets (regenerable from outputs/dataset_report/_stage_dataset_v2.py)
 data/
 plant_dataset/
+plant_dataset_merged/
+plant_dataset_staging/
+
+# Trained models and eval artifacts (regenerable from src/train.py)
 outputs/
+models/
+*.h5
+*.ckpt
+*.pb
+
+# Runtime artifacts (regenerated per /predict call)
+webapp/static/gradcam_result.png
+webapp/static/segmented_leaf.png
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+__MACOSX/
+
+# Logs / DBs
+*.log
+*.sqlite3
