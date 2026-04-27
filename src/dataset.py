@@ -2,12 +2,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras.utils import image_dataset_from_directory
 
-
-CLASS_NAMES = [
-    "Potato___Early_blight",
-    "Potato___healthy",
-    "Potato___Late_blight",
-]
+from src.constants import CLASS_NAMES, NUM_CLASSES
 
 
 def make_dataset_from_directory(

@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.utils.class_weight import compute_class_weight
 
+from src.constants import CLASS_NAMES, NUM_CLASSES
 from src.dataset import make_dataset_from_directory
 from src.model import build_model
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -12,7 +13,9 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default="data")
+    parser.add_argument("--data_dir", type=str, default="plant_dataset_staging")
+    parser.add_argument("--train_subdir", type=str, default="_train")
+    parser.add_argument("--val_subdir", type=str, default="_val")
     parser.add_argument("--img_size", type=int, default=224)  # INT ONLY
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=20)
@@ -20,6 +23,7 @@ def parse_args():
     parser.add_argument("--base", type=str, default="EfficientNetB0")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--output_dir", type=str, default="outputs")
+    parser.add_argument("--model_filename", type=str, default="potato_model_v2.keras")
     return parser.parse_args()
 
 
@@ -28,8 +32,10 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    train_dir = os.path.join(args.data_dir, "train")
-    val_dir = os.path.join(args.data_dir, "val")
+    print(f"AgriScan360 training — CLASS_NAMES = {CLASS_NAMES} (NUM_CLASSES={NUM_CLASSES})")
+
+    train_dir = os.path.join(args.data_dir, args.train_subdir)
+    val_dir = os.path.join(args.data_dir, args.val_subdir)
 
     train_ds, class_names = make_dataset_from_directory(
         train_dir,
@@ -52,7 +58,7 @@ def main():
     labels = np.array(labels)
     class_weights = compute_class_weight(
         class_weight="balanced",
-        classes=np.unique(labels),
+        classes=np.arange(NUM_CLASSES),
         y=labels,
     )
     class_weight_dict = dict(enumerate(class_weights))
@@ -73,7 +79,7 @@ def main():
 
     # Save best model automatically
     checkpoint = ModelCheckpoint(
-        os.path.join(args.output_dir, "potato_model.keras"),
+        os.path.join(args.output_dir, args.model_filename),
         monitor="val_accuracy",
         save_best_only=True
     )
@@ -117,7 +123,7 @@ def main():
         class_weight=class_weight_dict,
     )
 
-    model_path = os.path.join(args.output_dir, "potato_model.keras")
+    model_path = os.path.join(args.output_dir, args.model_filename)
     model.save(model_path)
 
     print(f"Model saved to {model_path}")
