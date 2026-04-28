@@ -135,6 +135,81 @@
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Nav view toggle */
+    .nav-tab {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500; padding: 6px 12px;
+      border-radius: 8px; cursor: pointer; transition: all 0.15s;
+      color: var(--text-secondary); border: 1px solid transparent;
+    }
+    .nav-tab:hover { background: var(--surface-2); color: var(--text-primary); }
+    .nav-tab.active {
+      background: var(--accent-green-light);
+      color: var(--accent-green);
+      border-color: #b9e3c5;
+    }
+
+    /* Harvest log card grid */
+    .harvest-card {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .harvest-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+    }
+    .stage-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; font-family: 'DM Mono', monospace;
+      padding: 2px 7px; border-radius: 999px; letter-spacing: 0.04em;
+    }
+    .stage-pill.growing  { background:#dbeafe; color:#1d4ed8; }
+    .stage-pill.harvest  { background:#fef3c7; color:#92400e; }
+    .stage-pill.logged   { background:#dcfce7; color:#166534; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(28,28,26,0.45); backdrop-filter: blur(3px);
+      display: none; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-card {
+      background: var(--surface); border-radius: 16px;
+      width: 100%; max-width: 640px; max-height: 90vh;
+      overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      animation: fadeUp 0.25s ease;
+    }
+    .form-input {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: 14px; font-family: 'Geist', sans-serif;
+      background: var(--surface-2); color: var(--text-primary);
+      transition: border-color 0.15s;
+    }
+    .form-input:focus {
+      outline: none; border-color: var(--accent-green);
+      background: #fff;
+    }
+    .chip {
+      display: inline-block; padding: 6px 12px; border-radius: 999px;
+      border: 1px solid var(--border); font-size: 12px;
+      cursor: pointer; transition: all 0.15s;
+      background: var(--surface); color: var(--text-secondary);
+    }
+    .chip:hover { border-color: var(--accent-green); color: var(--accent-green); }
+    .chip.selected {
+      background: var(--accent-green); color: #fff; border-color: var(--accent-green);
+    }
+
+    /* Friendly error card (replaces raw red banner for known errors) */
+    .alert-card {
+      display: none; margin-top: 16px; padding: 16px 18px;
+      border-radius: 12px; border: 1px solid #fecaca;
+      background: linear-gradient(180deg, #fff5f5 0%, #fee2e2 100%);
+    }
+    .alert-card.active { display: block; animation: fadeUp 0.3s ease; }
   </style>
 </head>
 <body>
@@ -156,12 +231,17 @@
       </div>
     </div>
 
-    <!-- Center: specimen ID -->
-    <div class="hidden md:flex items-center gap-2 mono text-xs" style="color:var(--text-muted);">
-      <span>SPECIMEN</span>
-      <span style="color: var(--text-secondary);" class="font-medium">SPC-20240315-0042</span>
-      <span style="width:5px;height:5px;border-radius:50%;background:var(--accent-green);" class="pulse-dot inline-block"></span>
-      <span style="color:var(--accent-green);">LIVE</span>
+    <!-- Center: view tabs -->
+    <div class="hidden md:flex items-center gap-1">
+      <button id="tabDiagnostics" class="nav-tab active" onclick="switchView('diagnostics')">
+        <i data-lucide="microscope" style="width:14px;height:14px;"></i>
+        <span>Diagnostics</span>
+      </button>
+      <button id="tabHarvest" class="nav-tab" onclick="switchView('harvest')">
+        <i data-lucide="sprout" style="width:14px;height:14px;"></i>
+        <span>Harvest Log</span>
+        <span class="mono text-[10px] px-1.5 py-0.5 rounded-full" style="background:var(--accent-green); color:#fff;">NEW</span>
+      </button>
     </div>
 
     <!-- Right: actions -->
@@ -183,7 +263,7 @@
 <!-- ═══════════════════════════════════════════
      MAIN LAYOUT
 ═══════════════════════════════════════════ -->
-<main class="max-w-7xl mx-auto px-6 py-8">
+<main id="diagnosticsView" class="max-w-7xl mx-auto px-6 py-8">
 
   <!-- Page header -->
   <div class="mb-8 fade-up">
@@ -277,6 +357,28 @@
         </div>
 
         <div id="validationWarning" class="hidden mt-4 rounded-lg px-4 py-3 text-sm" style="background:var(--accent-red-light); border:1px solid #fecaca; color:var(--accent-red);"></div>
+
+        <!-- Friendlier error card for known states (e.g. model not loaded) -->
+        <div id="modelMissingCard" class="alert-card">
+          <div class="flex items-start gap-3">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#fff; border:1px solid #fecaca;">
+              <i data-lucide="alert-triangle" style="width:18px;height:18px;color:var(--accent-red);"></i>
+            </div>
+            <div class="flex-1">
+              <p class="font-semibold text-sm" style="color:var(--accent-red);">Diagnostic model isn't loaded yet</p>
+              <p class="text-xs mt-1" style="color:var(--text-secondary);">
+                The trained classifier file <span class="mono">potato_model_v2.keras</span> couldn't be found at
+                <span class="mono">outputs/</span>. Train it once with the command below — the dashboard will start working immediately afterwards.
+              </p>
+              <pre class="mono text-xs mt-3 px-3 py-2 rounded-md overflow-x-auto" style="background:#1c1c1a; color:#d8f3dc;">python -m src.train --data_dir plant_dataset_staging --epochs 20</pre>
+              <div class="flex items-center gap-2 mt-3 flex-wrap">
+                <button onclick="hideModelMissingCard()" class="text-xs font-medium px-3 py-1.5 rounded-lg" style="background:var(--accent-red); color:#fff;">Got it</button>
+                <a href="https://github.com/angarkartanmay-ops/AgriScan360-Global#training-the-model" target="_blank" class="text-xs px-3 py-1.5 rounded-lg" style="color:var(--accent-red); border:1px solid #fecaca; background:#fff;">View training guide</a>
+                <span class="text-[11px]" style="color:var(--text-muted);">Meanwhile, the Harvest Log still works in demo mode.</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div id="pipeline-status" class="hidden mt-4 rounded-lg px-4 py-4" style="background:var(--surface-2); border:1px solid var(--border);">
           <div class="flex items-center justify-between mb-2">
@@ -673,6 +775,402 @@
 
 
 <!-- ═══════════════════════════════════════════
+     HARVEST LOG VIEW (hidden by default)
+═══════════════════════════════════════════ -->
+<main id="harvestView" class="max-w-7xl mx-auto px-6 py-8 hidden">
+
+  <!-- Page header -->
+  <div class="mb-8 fade-up flex items-end justify-between flex-wrap gap-4">
+    <div>
+      <div class="flex items-center gap-2 mono text-xs mb-2" style="color:var(--text-muted);">
+        <i data-lucide="sprout" style="width:12px;height:12px;"></i>
+        <span>CROP LIFECYCLE TRACKER — REAL-TIME LEARNING LOOP</span>
+      </div>
+      <h1 class="serif text-3xl font-medium" style="color:var(--text-primary); letter-spacing:-0.03em;">My Harvest Log</h1>
+      <p class="text-sm mt-1" style="color:var(--text-secondary);">Track scanned plants from sowing to harvest. Your post-harvest feedback retrains the model on real field outcomes.</p>
+    </div>
+    <button id="addHarvestEntryBtn" onclick="openLogModal()" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all" style="background:var(--accent-green); color:#fff;" onmouseover="this.style.background='#215c42'" onmouseout="this.style.background='var(--accent-green)'">
+      <i data-lucide="plus-circle" style="width:14px;height:14px;"></i>
+      Log a New Plant
+    </button>
+  </div>
+
+  <!-- Stats strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 fade-up fade-up-1">
+    <div class="rounded-xl p-4" style="background:var(--surface); border:1px solid var(--border);">
+      <p class="mono text-xs" style="color:var(--text-muted);">PLANTS TRACKED</p>
+      <p class="serif text-2xl font-medium mt-1" style="color:var(--text-primary);">12</p>
+    </div>
+    <div class="rounded-xl p-4" style="background:var(--surface); border:1px solid var(--border);">
+      <p class="mono text-xs" style="color:var(--text-muted);">AWAITING HARVEST</p>
+      <p class="serif text-2xl font-medium mt-1" style="color:var(--accent-blue);">5</p>
+    </div>
+    <div class="rounded-xl p-4" style="background:var(--surface); border:1px solid var(--border);">
+      <p class="mono text-xs" style="color:var(--text-muted);">FEEDBACK SUBMITTED</p>
+      <p class="serif text-2xl font-medium mt-1" style="color:var(--accent-green);">7</p>
+    </div>
+    <div class="rounded-xl p-4" style="background:var(--surface); border:1px solid var(--border);">
+      <p class="mono text-xs" style="color:var(--text-muted);">RETRAINING CONTRIBUTION</p>
+      <p class="serif text-2xl font-medium mt-1" style="color:var(--text-primary);">+0.6% F1</p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 mb-5 flex-wrap">
+    <span class="mono text-xs" style="color:var(--text-muted);">FILTER:</span>
+    <button class="chip selected" data-filter="all" onclick="filterHarvest('all', this)">All</button>
+    <button class="chip" data-filter="growing" onclick="filterHarvest('growing', this)">Growing</button>
+    <button class="chip" data-filter="harvest" onclick="filterHarvest('harvest', this)">Awaiting feedback</button>
+    <button class="chip" data-filter="logged" onclick="filterHarvest('logged', this)">Feedback logged</button>
+  </div>
+
+  <!-- Harvest Card Grid -->
+  <div id="harvestGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+    <!-- Card 1 — Awaiting feedback -->
+    <article class="harvest-card rounded-xl overflow-hidden cursor-pointer fade-up" data-stage="harvest" style="background:var(--surface); border:1px solid var(--border);" onclick="openFeedbackModal('SPC-20240228-0017', 'Late Blight (Suspected)', 'Tomato', '2024-02-28', 'Karnataka, IN')">
+      <div class="lab-grid relative" style="height:160px; background:linear-gradient(135deg, #d8f3dc 0%, #b7e4c7 100%);">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="leaf" style="width:48px;height:48px;color:var(--accent-green);"></i>
+        </div>
+        <span class="stage-pill harvest absolute top-3 right-3">⏳ AWAITING FEEDBACK</span>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between">
+          <p class="mono text-xs" style="color:var(--text-muted);">SPC-20240228-0017</p>
+          <span class="text-xs" style="color:var(--text-muted);">61 days ago</span>
+        </div>
+        <h3 class="serif text-lg font-medium mt-1" style="color:var(--text-primary);">Tomato — Plot A2</h3>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Diagnosis: <span class="font-medium" style="color:var(--accent-amber);">Fungi (87%)</span></p>
+        <div class="flex items-center gap-1.5 mt-3 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i><span>12.97°N, 77.59°E · Karnataka</span>
+        </div>
+        <button class="w-full mt-3 py-2 text-xs font-medium rounded-lg transition-all" style="background:var(--accent-green-light); color:var(--accent-green);">
+          Add post-harvest feedback →
+        </button>
+      </div>
+    </article>
+
+    <!-- Card 2 — Awaiting feedback -->
+    <article class="harvest-card rounded-xl overflow-hidden cursor-pointer fade-up fade-up-1" data-stage="harvest" style="background:var(--surface); border:1px solid var(--border);" onclick="openFeedbackModal('SPC-20240315-0042', 'Healthy', 'Potato', '2024-03-15', 'Punjab, IN')">
+      <div class="lab-grid relative" style="height:160px; background:linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="leaf" style="width:48px;height:48px;color:var(--accent-amber);"></i>
+        </div>
+        <span class="stage-pill harvest absolute top-3 right-3">⏳ AWAITING FEEDBACK</span>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between">
+          <p class="mono text-xs" style="color:var(--text-muted);">SPC-20240315-0042</p>
+          <span class="text-xs" style="color:var(--text-muted);">45 days ago</span>
+        </div>
+        <h3 class="serif text-lg font-medium mt-1" style="color:var(--text-primary);">Potato — Plot B7</h3>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Diagnosis: <span class="font-medium" style="color:var(--accent-green);">Healthy (94%)</span></p>
+        <div class="flex items-center gap-1.5 mt-3 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i><span>30.73°N, 76.78°E · Punjab</span>
+        </div>
+        <button class="w-full mt-3 py-2 text-xs font-medium rounded-lg transition-all" style="background:var(--accent-green-light); color:var(--accent-green);">
+          Add post-harvest feedback →
+        </button>
+      </div>
+    </article>
+
+    <!-- Card 3 — Growing -->
+    <article class="harvest-card rounded-xl overflow-hidden cursor-pointer fade-up fade-up-2" data-stage="growing" style="background:var(--surface); border:1px solid var(--border);">
+      <div class="lab-grid relative" style="height:160px; background:linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="sprout" style="width:48px;height:48px;color:var(--accent-blue);"></i>
+        </div>
+        <span class="stage-pill growing absolute top-3 right-3">🌱 GROWING</span>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between">
+          <p class="mono text-xs" style="color:var(--text-muted);">SPC-20240412-0083</p>
+          <span class="text-xs" style="color:var(--text-muted);">16 days ago</span>
+        </div>
+        <h3 class="serif text-lg font-medium mt-1" style="color:var(--text-primary);">Wheat — Plot C1</h3>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Diagnosis: <span class="font-medium" style="color:var(--accent-amber);">Pest (73%)</span></p>
+        <div class="flex items-center gap-1.5 mt-3 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i><span>26.85°N, 80.95°E · Uttar Pradesh</span>
+        </div>
+        <p class="text-xs mt-3" style="color:var(--text-muted);">Harvest expected in ~74 days</p>
+      </div>
+    </article>
+
+    <!-- Card 4 — Logged -->
+    <article class="harvest-card rounded-xl overflow-hidden cursor-pointer fade-up fade-up-3" data-stage="logged" style="background:var(--surface); border:1px solid var(--border);">
+      <div class="lab-grid relative" style="height:160px; background:linear-gradient(135deg, #dcfce7 0%, #86efac 100%);">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="check-circle-2" style="width:48px;height:48px;color:#166534;"></i>
+        </div>
+        <span class="stage-pill logged absolute top-3 right-3">✓ FEEDBACK LOGGED</span>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between">
+          <p class="mono text-xs" style="color:var(--text-muted);">SPC-20231110-0009</p>
+          <span class="text-xs" style="color:var(--text-muted);">169 days ago</span>
+        </div>
+        <h3 class="serif text-lg font-medium mt-1" style="color:var(--text-primary);">Rice — Plot D3</h3>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Final yield: <span class="font-medium" style="color:var(--text-primary);">4.8 t/ha</span> · Loam soil</p>
+        <div class="flex items-center gap-1.5 mt-3 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i><span>11.13°N, 78.65°E · Tamil Nadu</span>
+        </div>
+        <p class="text-xs mt-3" style="color:#166534;">✓ Sample contributed to retraining batch #14</p>
+      </div>
+    </article>
+
+    <!-- Card 5 — Growing -->
+    <article class="harvest-card rounded-xl overflow-hidden cursor-pointer fade-up fade-up-4" data-stage="growing" style="background:var(--surface); border:1px solid var(--border);">
+      <div class="lab-grid relative" style="height:160px; background:linear-gradient(135deg, #fce7f3 0%, #f9a8d4 100%);">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="sprout" style="width:48px;height:48px;color:#9d174d;"></i>
+        </div>
+        <span class="stage-pill growing absolute top-3 right-3">🌱 GROWING</span>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between">
+          <p class="mono text-xs" style="color:var(--text-muted);">SPC-20240420-0091</p>
+          <span class="text-xs" style="color:var(--text-muted);">8 days ago</span>
+        </div>
+        <h3 class="serif text-lg font-medium mt-1" style="color:var(--text-primary);">Cotton — Plot E2</h3>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Diagnosis: <span class="font-medium" style="color:var(--accent-green);">Healthy (91%)</span></p>
+        <div class="flex items-center gap-1.5 mt-3 text-xs" style="color:var(--text-muted);">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i><span>21.15°N, 79.08°E · Maharashtra</span>
+        </div>
+        <p class="text-xs mt-3" style="color:var(--text-muted);">Harvest expected in ~120 days</p>
+      </div>
+    </article>
+
+    <!-- Card 6 — Empty placeholder for adding -->
+    <article class="rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer fade-up fade-up-5 transition-all" style="border-color:var(--border-strong); min-height:340px; color:var(--text-muted);" onclick="openLogModal()" onmouseover="this.style.borderColor='var(--accent-green)';this.style.color='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-muted)'">
+      <i data-lucide="plus-circle" style="width:36px;height:36px;"></i>
+      <p class="text-sm font-medium">Log a new plant</p>
+      <p class="text-xs">Upload a photo to start tracking</p>
+    </article>
+
+  </div>
+
+  <!-- How it works strip -->
+  <div class="mt-10 rounded-xl p-6" style="background:var(--surface); border:1px solid var(--border);">
+    <p class="mono text-xs mb-3" style="color:var(--text-muted);">HOW THIS HELPS THE MODEL</p>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style="background:var(--accent-green-light); color:var(--accent-green);">
+          <i data-lucide="camera" style="width:18px;height:18px;"></i>
+        </div>
+        <p class="font-medium text-sm">1. Snap &amp; log</p>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Upload a leaf photo. Location, date and the AI's first diagnosis are auto-saved.</p>
+      </div>
+      <div>
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style="background:var(--accent-blue-light); color:var(--accent-blue);">
+          <i data-lucide="sprout" style="width:18px;height:18px;"></i>
+        </div>
+        <p class="font-medium text-sm">2. Grow</p>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Track the plant through its lifecycle. Reopen later to add new scans.</p>
+      </div>
+      <div>
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style="background:var(--accent-amber-light); color:var(--accent-amber);">
+          <i data-lucide="wheat" style="width:18px;height:18px;"></i>
+        </div>
+        <p class="font-medium text-sm">3. Harvest &amp; report</p>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">After harvest, log final yield, soil type and whether the diagnosis was right.</p>
+      </div>
+      <div>
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center mb-2" style="background:#f3e8ff; color:#7c3aed;">
+          <i data-lucide="brain-circuit" style="width:18px;height:18px;"></i>
+        </div>
+        <p class="font-medium text-sm">4. Model learns</p>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Verified samples enter the next retraining batch — the model gets smarter every season.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+
+<!-- ═══════════════════════════════════════════
+     POST-HARVEST FEEDBACK MODAL
+═══════════════════════════════════════════ -->
+<div id="feedbackModal" class="modal-backdrop" onclick="if(event.target===this) closeFeedbackModal()">
+  <div class="modal-card">
+    <!-- Header -->
+    <div class="px-6 py-5 flex items-start justify-between" style="border-bottom:1px solid var(--border);">
+      <div>
+        <p class="mono text-xs" style="color:var(--text-muted);" id="fbSpecimenId">SPC-XXXX</p>
+        <h2 class="serif text-2xl font-medium mt-1" style="color:var(--text-primary);">Post-Harvest Feedback</h2>
+        <p class="text-xs mt-1" style="color:var(--text-secondary);">Your verified outcome will join the next model retraining batch.</p>
+      </div>
+      <button onclick="closeFeedbackModal()" class="w-8 h-8 rounded-lg flex items-center justify-center transition-all" style="color:var(--text-muted);" onmouseover="this.style.background='var(--surface-2)';this.style.color='var(--text-primary)'" onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)'">
+        <i data-lucide="x" style="width:16px;height:16px;"></i>
+      </button>
+    </div>
+
+    <!-- Auto-fetched context -->
+    <div class="px-6 py-4 grid grid-cols-2 gap-3" style="background:var(--surface-2);">
+      <div>
+        <p class="mono text-[10px]" style="color:var(--text-muted);">CROP</p>
+        <p class="text-sm font-medium" id="fbCrop">Tomato</p>
+      </div>
+      <div>
+        <p class="mono text-[10px]" style="color:var(--text-muted);">ORIGINAL DIAGNOSIS</p>
+        <p class="text-sm font-medium" id="fbDiagnosis">Late Blight (Suspected)</p>
+      </div>
+      <div>
+        <p class="mono text-[10px]" style="color:var(--text-muted);">SCAN DATE</p>
+        <p class="text-sm font-medium" id="fbDate">2024-02-28</p>
+      </div>
+      <div>
+        <p class="mono text-[10px]" style="color:var(--text-muted);">LOCATION (auto-fetched)</p>
+        <p class="text-sm font-medium flex items-center gap-1.5" id="fbLocation">
+          <i data-lucide="map-pin" style="width:12px;height:12px;color:var(--accent-green);"></i>
+          <span>Karnataka, IN</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <form class="px-6 py-5 flex flex-col gap-5" onsubmit="submitFeedback(event)">
+
+      <!-- Was diagnosis correct -->
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Was the AI diagnosis correct?</label>
+        <div class="flex gap-2 flex-wrap">
+          <span class="chip" onclick="toggleChip(this, 'diagnosisAccurate')" data-value="yes">✓ Yes, accurate</span>
+          <span class="chip" onclick="toggleChip(this, 'diagnosisAccurate')" data-value="partial">~ Partially correct</span>
+          <span class="chip" onclick="toggleChip(this, 'diagnosisAccurate')" data-value="no">✗ No, wrong</span>
+          <span class="chip" onclick="toggleChip(this, 'diagnosisAccurate')" data-value="unknown">? Not sure</span>
+        </div>
+      </div>
+
+      <!-- Final yield -->
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Final yield</label>
+        <div class="flex gap-2">
+          <input type="number" step="0.01" placeholder="e.g. 4.8" class="form-input" style="flex:2;" />
+          <select class="form-input" style="flex:1;">
+            <option>t/ha</option>
+            <option>kg/acre</option>
+            <option>quintal/ha</option>
+            <option>kg total</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Soil type -->
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Soil type</label>
+        <div class="flex gap-2 flex-wrap">
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="sandy">Sandy</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="loamy">Loamy</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="clay">Clay</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="silty">Silty</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="black-cotton">Black cotton</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="red">Red</span>
+          <span class="chip" onclick="toggleChip(this, 'soilType')" data-value="alluvial">Alluvial</span>
+        </div>
+      </div>
+
+      <!-- Treatment applied -->
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Treatment applied (if any)</label>
+        <input type="text" placeholder="e.g. Copper oxychloride, weekly spray" class="form-input" />
+      </div>
+
+      <!-- Irrigation & inputs -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Irrigation</label>
+          <select class="form-input">
+            <option>Rain-fed</option>
+            <option>Drip</option>
+            <option>Flood</option>
+            <option>Sprinkler</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Fertilizer used</label>
+          <input type="text" placeholder="e.g. NPK 19-19-19" class="form-input" />
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color:var(--text-primary);">Field notes (optional)</label>
+        <textarea rows="3" placeholder="Anything else worth knowing — late rain, pest spike, neighbour's plot was infected first…" class="form-input" style="resize:vertical;"></textarea>
+      </div>
+
+      <!-- Re-upload current state -->
+      <div class="rounded-lg p-4 flex items-center gap-3" style="background:var(--surface-2); border:1px dashed var(--border-strong);">
+        <i data-lucide="camera" style="width:20px;height:20px;color:var(--text-secondary);"></i>
+        <div class="flex-1">
+          <p class="text-sm font-medium">Add a final harvest photo</p>
+          <p class="text-xs" style="color:var(--text-muted);">A side-by-side helps the model learn what your treatment actually achieved.</p>
+        </div>
+        <button type="button" class="text-xs px-3 py-1.5 rounded-lg" style="background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);">
+          Upload
+        </button>
+      </div>
+
+      <!-- Consent -->
+      <label class="flex items-start gap-2 text-xs" style="color:var(--text-secondary);">
+        <input type="checkbox" checked style="margin-top:2px;" />
+        <span>I consent to anonymously contribute this image, location and feedback to AgriScan's federated retraining dataset. I can revoke this in settings later.</span>
+      </label>
+
+      <!-- Footer buttons -->
+      <div class="flex items-center justify-end gap-2 pt-2" style="border-top:1px solid var(--border);">
+        <button type="button" onclick="closeFeedbackModal()" class="text-sm px-4 py-2 rounded-lg" style="color:var(--text-secondary); border:1px solid var(--border);">Cancel</button>
+        <button type="submit" class="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg" style="background:var(--accent-green); color:#fff;">
+          <i data-lucide="brain-circuit" style="width:14px;height:14px;"></i>
+          Contribute to training
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     "LOG A NEW PLANT" QUICK MODAL
+═══════════════════════════════════════════ -->
+<div id="logModal" class="modal-backdrop" onclick="if(event.target===this) closeLogModal()">
+  <div class="modal-card" style="max-width:480px;">
+    <div class="px-6 py-5" style="border-bottom:1px solid var(--border);">
+      <h2 class="serif text-2xl font-medium" style="color:var(--text-primary);">Log a new plant</h2>
+      <p class="text-xs mt-1" style="color:var(--text-secondary);">Run a diagnostic scan to start tracking. We'll auto-save the photo, your location and the result.</p>
+    </div>
+    <div class="px-6 py-5 flex flex-col gap-4">
+      <div class="rounded-lg lab-grid p-6 text-center cursor-pointer transition-all" style="border:2px dashed var(--border-strong);" onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-strong)'" onclick="closeLogModal(); switchView('diagnostics');">
+        <i data-lucide="upload-cloud" style="width:32px;height:32px;color:var(--accent-green);margin:0 auto 8px;"></i>
+        <p class="text-sm font-medium">Open Diagnostics view</p>
+        <p class="text-xs mt-1" style="color:var(--text-muted);">Snap a leaf, get a result, then return here to track it</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Crop</label>
+          <select class="form-input">
+            <option>Potato</option><option>Tomato</option><option>Wheat</option>
+            <option>Rice</option><option>Cotton</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Plot label</label>
+          <input type="text" placeholder="e.g. Block 3A" class="form-input" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Expected harvest in</label>
+        <input type="text" placeholder="e.g. 90 days" class="form-input" />
+      </div>
+    </div>
+    <div class="px-6 py-4 flex items-center justify-end gap-2" style="border-top:1px solid var(--border); background:var(--surface-2);">
+      <button onclick="closeLogModal()" class="text-sm px-4 py-2 rounded-lg" style="color:var(--text-secondary); border:1px solid var(--border);">Cancel</button>
+      <button onclick="closeLogModal(); switchView('diagnostics');" class="text-sm font-medium px-4 py-2 rounded-lg" style="background:var(--accent-green); color:#fff;">Continue to scan</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
      FOOTER
 ═══════════════════════════════════════════ -->
 <footer class="mt-10 py-6" style="border-top:1px solid var(--border);">
@@ -760,17 +1258,149 @@
   }
 
   function showValidationWarning(message) {
+    // Route well-known backend errors to friendlier UI states.
+    const text = String(message || '');
+    if (/model.*(not loaded|not found|missing)/i.test(text)) {
+      showModelMissingCard();
+      hideRawWarning();
+      return;
+    }
     const warning = getEl('validationWarning');
     if (!warning) return;
-    warning.textContent = message;
+    // Long Python tracebacks get truncated to a one-liner with an expandable "Details".
+    const isLong = text.length > 220 || text.split('\n').length > 2;
+    if (isLong) {
+      const summary = text.split(/[\n\.]/)[0].slice(0, 200) + '…';
+      warning.innerHTML = '';
+      const summaryP = document.createElement('p');
+      summaryP.style.fontWeight = '600';
+      summaryP.textContent = 'Diagnostic pipeline error: ' + summary;
+      const details = document.createElement('details');
+      details.style.marginTop = '6px';
+      const summaryEl = document.createElement('summary');
+      summaryEl.style.cursor = 'pointer';
+      summaryEl.style.fontSize = '11px';
+      summaryEl.style.opacity = '0.85';
+      summaryEl.textContent = 'Show technical details';
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'font-family:DM Mono,monospace;font-size:11px;white-space:pre-wrap;margin-top:6px;max-height:160px;overflow-y:auto;';
+      pre.textContent = text;
+      details.appendChild(summaryEl);
+      details.appendChild(pre);
+      warning.appendChild(summaryP);
+      warning.appendChild(details);
+    } else {
+      warning.textContent = text;
+    }
     warning.classList.remove('hidden');
   }
 
   function hideValidationWarning() {
+    hideRawWarning();
+    hideModelMissingCard();
+  }
+
+  function hideRawWarning() {
     const warning = getEl('validationWarning');
     if (!warning) return;
     warning.textContent = '';
     warning.classList.add('hidden');
+  }
+
+  function showModelMissingCard() {
+    const card = getEl('modelMissingCard');
+    if (card) card.classList.add('active');
+  }
+
+  function hideModelMissingCard() {
+    const card = getEl('modelMissingCard');
+    if (card) card.classList.remove('active');
+  }
+
+  // ────────────────────────────────────────────
+  //  Harvest Log view + modal interactions
+  // ────────────────────────────────────────────
+  function switchView(view) {
+    const diag = getEl('diagnosticsView');
+    const harv = getEl('harvestView');
+    const tabD = getEl('tabDiagnostics');
+    const tabH = getEl('tabHarvest');
+    if (!diag || !harv) return;
+    if (view === 'harvest') {
+      diag.classList.add('hidden');
+      harv.classList.remove('hidden');
+      tabD?.classList.remove('active');
+      tabH?.classList.add('active');
+    } else {
+      harv.classList.add('hidden');
+      diag.classList.remove('hidden');
+      tabH?.classList.remove('active');
+      tabD?.classList.add('active');
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openFeedbackModal(specimenId, diagnosis, crop, date, location) {
+    safeSetText('fbSpecimenId', specimenId || 'SPC-XXXX');
+    safeSetText('fbDiagnosis', diagnosis || '—');
+    safeSetText('fbCrop', crop || '—');
+    safeSetText('fbDate', date || '—');
+    const locEl = getEl('fbLocation');
+    if (locEl) {
+      locEl.innerHTML = '<i data-lucide="map-pin" style="width:12px;height:12px;color:var(--accent-green);"></i><span>' + (location || 'Auto-fetching…') + '</span>';
+    }
+    const modal = getEl('feedbackModal');
+    if (modal) modal.classList.add('active');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function closeFeedbackModal() {
+    const modal = getEl('feedbackModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function openLogModal() {
+    const modal = getEl('logModal');
+    if (modal) modal.classList.add('active');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function closeLogModal() {
+    const modal = getEl('logModal');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function toggleChip(el, group) {
+    if (!el) return;
+    const parent = el.parentElement;
+    if (parent) {
+      parent.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
+    }
+    el.classList.add('selected');
+  }
+
+  function filterHarvest(stage, btn) {
+    document.querySelectorAll('[data-filter]').forEach((b) => b.classList.remove('selected'));
+    if (btn) btn.classList.add('selected');
+    document.querySelectorAll('#harvestGrid [data-stage]').forEach((card) => {
+      if (stage === 'all' || card.getAttribute('data-stage') === stage) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  }
+
+  function submitFeedback(event) {
+    event.preventDefault();
+    closeFeedbackModal();
+    // UI-only acknowledgement until backend retrain endpoint is wired up.
+    const banner = document.createElement('div');
+    banner.className = 'fixed bottom-6 right-6 px-5 py-4 rounded-xl shadow-lg flex items-center gap-3 fade-up';
+    banner.style.cssText = 'background:var(--accent-green); color:#fff; z-index:200; max-width:360px;';
+    banner.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><div><p style="font-weight:600;font-size:14px;">Feedback queued for retraining</p><p style="font-size:12px;opacity:0.85;">Sample added to the next federated training batch.</p></div>';
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 4200);
   }
 
   function updateEnvironmentalPanel(data = {}) {

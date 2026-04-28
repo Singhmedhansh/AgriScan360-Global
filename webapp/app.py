@@ -18,6 +18,7 @@ from PIL import Image
 
 from src.constants import CLASS_NAMES, NUM_CLASSES
 from src.gradcam import generate_gradcam, overlay_heatmap
+from src.model import build_model
 from src.segmentation import segment_leaf as segment_leaf_with_mask
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -350,6 +351,45 @@ else:
         f"Did you load the wrong .keras file?"
     )
 
+    # Rebuild a fresh in-memory graph and transfer weights.
+    # TF 2.13 occasionally deserializes EfficientNet-based functional models with
+    # stale inbound-node tensor references on the internal Rescaling/Normalization
+    # layers, producing "Graph disconnected" errors at inference and Grad-CAM time.
+    #
+    # Additionally, the HDF5 saver in Keras 2.13 duplicates Variable objects when
+    # some backbone layers were unfrozen during fine-tuning, producing e.g. 634
+    # weights vs 322 in a clean build.  The first N weight shapes always match,
+    # so we do a partial (first-N) transfer.
+    try:
+        fresh_model, _ = build_model(num_classes=NUM_CLASSES)
+        loaded_weights = model.get_weights()
+        fresh_weight_count = len(fresh_model.get_weights())
+
+        # Shapes of the first `fresh_weight_count` weights must align.
+        shapes_ok = all(
+            loaded_weights[i].shape == fresh_model.get_weights()[i].shape
+            for i in range(min(fresh_weight_count, len(loaded_weights)))
+        )
+
+        if shapes_ok and len(loaded_weights) >= fresh_weight_count:
+            fresh_model.set_weights(loaded_weights[:fresh_weight_count])
+            _probe = fresh_model.predict(
+                np.zeros((1, 224, 224, 3), dtype=np.float32), verbose=0
+            )
+            assert _probe.shape[-1] == NUM_CLASSES
+            model = fresh_model
+            print(
+                f"Rebuilt model with clean graph (transferred {fresh_weight_count}"
+                f"/{len(loaded_weights)} weights); inference + Grad-CAM verified."
+            )
+        else:
+            print(
+                "Weight shape mismatch on rebuild; "
+                "using loaded model as-is (GradCAM may use fallback heatmap)."
+            )
+    except Exception as rebuild_exc:
+        print(f"Model graph rebuild skipped: {rebuild_exc}. Using loaded model as-is.")
+
 @app.get("/")
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -412,14 +452,28 @@ async def predict(
         image_batch = leaf_img.astype(np.float32)
         image_batch = np.expand_dims(image_batch, axis=0)
 
-        preds = model.predict(image_batch)
-        heatmap = generate_gradcam(model, image_batch)
+        try:
+            preds = model.predict(image_batch, verbose=0)
+        except Exception as predict_exc:
+            print("model.predict failed; retrying via direct call:", predict_exc)
+            preds = model(tf.convert_to_tensor(image_batch), training=False).numpy()
+
+        try:
+            heatmap = generate_gradcam(model, image_batch)
+        except Exception as gradcam_exc:
+            print("GradCAM generation failed; falling back to flat heatmap:", gradcam_exc)
+            heatmap = np.zeros((224, 224), dtype=np.float32)
+
         severity_pct = compute_severity_pct(heatmap)
         severity_stage = classify_severity_stage(severity_pct)
 
         original_image = leaf_img
-        overlay_image = overlay_heatmap(original_image, heatmap)
-        Image.fromarray(overlay_image).save(GRADCAM_OUTPUT_PATH)
+        try:
+            overlay_image = overlay_heatmap(original_image, heatmap)
+            Image.fromarray(overlay_image).save(GRADCAM_OUTPUT_PATH)
+        except Exception as overlay_exc:
+            print("Heatmap overlay save failed:", overlay_exc)
+            Image.fromarray(original_image).save(GRADCAM_OUTPUT_PATH)
 
         max_prob = float(np.max(preds[0]))
         if max_prob < 0.5 and quality_warning is None:

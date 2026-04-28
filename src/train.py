@@ -138,6 +138,20 @@ def main():
         class_weight=class_weight_dict,
     )
 
+    # Re-freeze the backbone before saving.  Keras 2.13 HDF5 serializer
+    # duplicates Variable objects for layers toggled trainable during fine-tuning
+    # (e.g. 634 weights vs 322 in a clean build).  Re-freezing eliminates the
+    # duplicates and produces a clean checkpoint that loads without weight
+    # count mismatches.
+    base_model.trainable = False
+    # Recompile so Keras internalises the new trainable state.
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+        loss="categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+    print("Backbone re-frozen for clean serialization.")
+
     model_path = os.path.join(args.output_dir, args.model_filename)
     model.save(model_path)
 

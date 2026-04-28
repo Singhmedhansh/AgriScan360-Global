@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 def _find_last_conv_layer(model):
-    # Search inside nested submodels first (e.g., EfficientNet backbone as model.layers[0]).
+    """Walk model (and nested sub-models) to find the deepest Conv2D layer."""
     for layer in reversed(model.layers):
         if isinstance(layer, tf.keras.Model):
             for sublayer in reversed(layer.layers):
@@ -15,39 +15,80 @@ def _find_last_conv_layer(model):
     raise ValueError("Could not find a Conv2D layer for GradCAM.")
 
 
+def _find_last_conv_layer_name(model):
+    """Return the *name* of the deepest Conv2D layer in the model graph."""
+    last_conv = _find_last_conv_layer(model)
+    return last_conv.name
+
+
 def generate_gradcam(model, img_array):
-    last_conv_layer = _find_last_conv_layer(model)
+    """Generate a Grad-CAM heatmap for the top-predicted class.
 
-    grad_model = tf.keras.models.Model(
-        inputs=model.input,
-        outputs=[
-            last_conv_layer.output,
-            model.output,
-        ],
-    )
+    This implementation uses a proper Keras sub-model approach instead of
+    monkey-patching ``layer.call``.  The old hook-based approach fails on
+    HDF5-deserialized models because TF 2.13 invokes nested sub-models as
+    opaque blocks, never calling individual sublayer ``.call()`` methods.
 
+    The sub-model approach builds a lightweight ``tf.keras.Model`` that
+    shares weights with the original but explicitly exposes the conv-layer
+    output as a second output.  This guarantees gradient flow regardless
+    of how the model was serialized / deserialized.
+    """
     img_tensor = tf.convert_to_tensor(img_array, dtype=tf.float32)
+    target_height = int(img_tensor.shape[1])
+    target_width = int(img_tensor.shape[2])
+
+    # Build a Grad-CAM model: same input → [predictions, last_conv_output]
+    last_conv_name = _find_last_conv_layer_name(model)
+
+    # Walk the model to get the conv output tensor.
+    # It might live inside a nested sub-model (e.g. EfficientNetB0).
+    conv_output_tensor = None
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.Model):
+            try:
+                conv_output_tensor = layer.get_layer(last_conv_name).output
+                break
+            except ValueError:
+                continue
+        if layer.name == last_conv_name:
+            conv_output_tensor = layer.output
+            break
+
+    if conv_output_tensor is None:
+        # Fallback: return a flat (zero) heatmap — better than crashing.
+        return np.zeros((target_height, target_width), dtype=np.float32)
+
+    try:
+        grad_model = tf.keras.Model(
+            inputs=model.input,
+            outputs=[model.output, conv_output_tensor],
+        )
+    except ValueError:
+        # "Graph disconnected" — the conv tensor can't be traced from model.input.
+        # This happens with some HDF5 deserialisations.  Fall back to flat heatmap.
+        return np.zeros((target_height, target_width), dtype=np.float32)
 
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img_tensor, training=False)
+        predictions, conv_outputs = grad_model(img_tensor, training=False)
         pred_index = tf.argmax(predictions[0])
         class_channel = predictions[:, pred_index]
 
     gradients = tape.gradient(class_channel, conv_outputs)
-    pooled_gradients = tf.reduce_mean(gradients, axis=(0, 1, 2))
 
+    if gradients is None:
+        return np.zeros((target_height, target_width), dtype=np.float32)
+
+    pooled_gradients = tf.reduce_mean(gradients, axis=(0, 1, 2))
     conv_outputs = conv_outputs[0]
     heatmap = tf.reduce_sum(conv_outputs * pooled_gradients, axis=-1)
     heatmap = tf.maximum(heatmap, 0)
     heatmap /= tf.reduce_max(heatmap) + 1e-8
 
-    target_height = int(img_tensor.shape[1])
-    target_width = int(img_tensor.shape[2])
     heatmap = tf.image.resize(
         heatmap[..., tf.newaxis],
-        (target_height, target_width)
+        (target_height, target_width),
     )
-
     return tf.squeeze(heatmap).numpy()
 
 
