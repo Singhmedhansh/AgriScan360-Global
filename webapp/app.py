@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import time
+import uuid
 
 import cv2
 import numpy as np
@@ -26,8 +27,10 @@ WEBAPP_DIR = BASE_DIR / "webapp"
 STATIC_DIR = WEBAPP_DIR / "static"
 TEMPLATES_DIR = WEBAPP_DIR / "templates"
 MODEL_PATH = BASE_DIR / "outputs" / "potato_model_v2.keras"
-GRADCAM_OUTPUT_PATH = STATIC_DIR / "gradcam_result.png"
-SEGMENTED_OUTPUT_PATH = STATIC_DIR / "segmented_leaf.png"
+# Per-request artifact filenames are generated inside /predict (UUID-suffixed)
+# so the browser never re-uses a cached image from an earlier prediction and
+# concurrent requests don't overwrite each other's heatmaps.
+RUNTIME_ARTIFACT_RETENTION = 20  # keep newest N gradcam_*.png / segmented_*.png
 USE_SEGMENTATION = False
 SEVERITY_HEATMAP_THRESHOLD = 0.5
 HOST_COMMON_NAME = "Potato"
@@ -120,32 +123,62 @@ TREATMENT_PROTOCOLS = {
         ],
     },
     "Fungi": {
-        "fungicides": ["Carbendazim 1g/L", "Propiconazole 1ml/L"],
-        "interval": "Every 7 days",
-        "phi": "14 days",
-        "immediate": ["Remove and destroy infected plant material", "Improve air circulation between plants"],
-        "prevention": ["Avoid overhead irrigation", "Practice crop rotation", "Use certified disease-free seed"]
+        "immediate": [
+            "Remove and destroy infected plant material",
+            "Improve air circulation between plants",
+        ],
+        "chemical": [
+            {"fungicide": "Carbendazim", "rate": "1 g/L", "interval": "7 days", "phi": "14 days"},
+            {"fungicide": "Propiconazole", "rate": "1 ml/L", "interval": "7 days", "phi": "14 days"},
+        ],
+        "prevention": [
+            "Avoid overhead irrigation",
+            "Practice crop rotation",
+            "Use certified disease-free seed",
+        ],
     },
     "Bacteria": {
-        "fungicides": ["Copper oxychloride 3g/L", "Streptomycin sulfate 0.5g/L"],
-        "interval": "Every 10 days",
-        "phi": "21 days",
-        "immediate": ["Remove infected plants immediately", "Avoid working in field when wet"],
-        "prevention": ["Use disease-free certified seed", "Avoid waterlogging", "Disinfect tools between rows"]
+        "immediate": [
+            "Remove infected plants immediately",
+            "Avoid working in field when wet",
+        ],
+        "chemical": [
+            {"fungicide": "Copper oxychloride", "rate": "3 g/L", "interval": "10 days", "phi": "21 days"},
+            {"fungicide": "Streptomycin sulfate", "rate": "0.5 g/L", "interval": "10 days", "phi": "21 days"},
+        ],
+        "prevention": [
+            "Use disease-free certified seed",
+            "Avoid waterlogging",
+            "Disinfect tools between rows",
+        ],
     },
     "Pest": {
-        "fungicides": ["Imidacloprid 0.5ml/L", "Spinosad 1ml/L"],
-        "interval": "Inspect weekly, spray only when threshold exceeded",
-        "phi": "7 days",
-        "immediate": ["Manual removal of visible pests", "Install yellow sticky traps"],
-        "prevention": ["Intercrop with marigold", "Avoid excess nitrogen fertilization"]
+        "immediate": [
+            "Manual removal of visible pests",
+            "Install yellow sticky traps",
+        ],
+        "chemical": [
+            {"fungicide": "Imidacloprid", "rate": "0.5 ml/L", "interval": "Threshold-based", "phi": "7 days"},
+            {"fungicide": "Spinosad", "rate": "1 ml/L", "interval": "Threshold-based", "phi": "7 days"},
+        ],
+        "prevention": [
+            "Intercrop with marigold",
+            "Avoid excess nitrogen fertilization",
+        ],
     },
     "Virus": {
-        "fungicides": ["No curative chemical — remove infected plants", "Imidacloprid 0.5ml/L for aphid vector control"],
-        "interval": "Monitor weekly",
-        "phi": "N/A",
-        "immediate": ["Uproot and destroy infected plants immediately to prevent spread"],
-        "prevention": ["Use certified virus-free seed", "Control aphids early in season", "Remove weed hosts around field"]
+        "immediate": [
+            "Uproot and destroy infected plants immediately to prevent spread",
+        ],
+        "chemical": [
+            {"fungicide": "Imidacloprid (vector control)", "rate": "0.5 ml/L", "interval": "Weekly", "phi": "N/A"},
+            {"fungicide": "No curative chemical", "rate": "—", "interval": "Remove plants", "phi": "N/A"},
+        ],
+        "prevention": [
+            "Use certified virus-free seed",
+            "Control aphids early in season",
+            "Remove weed hosts around field",
+        ],
     },
 }
 
@@ -420,6 +453,12 @@ async def predict(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected")
 
+    request_id = uuid.uuid4().hex[:12]
+    gradcam_filename = f"gradcam_{request_id}.png"
+    segmented_filename = f"segmented_{request_id}.png"
+    gradcam_path = STATIC_DIR / gradcam_filename
+    segmented_path = STATIC_DIR / segmented_filename
+
     temp_path: Path | None = None
     try:
         start_time = time.time()
@@ -442,7 +481,7 @@ async def predict(
             # Segmentation can under-detect non-uniform green leaves; continue with original image.
             quality_warning = "Leaf segmentation confidence is low; using original image for diagnosis."
 
-        cv2.imwrite(str(SEGMENTED_OUTPUT_PATH), segmented_leaf)
+        cv2.imwrite(str(segmented_path), segmented_leaf)
         leaf_img = segmented_leaf if use_segmented_leaf else uploaded_img
 
         leaf_img = cv2.resize(leaf_img, (224, 224))
@@ -467,13 +506,37 @@ async def predict(
         severity_pct = compute_severity_pct(heatmap)
         severity_stage = classify_severity_stage(severity_pct)
 
-        original_image = leaf_img
+        # Overlay heatmap on the full-resolution original upload (not the 224x224
+        # model input). Pass leaf_mask so off-leaf activations are damped — this
+        # is the single biggest readability win on field photos with mulch/soil.
+        # For Healthy predictions, suppress the heatmap entirely: there's no
+        # pathogen to localize, and a fiery red heatmap on a healthy leaf is
+        # confusing UX even though it's algorithmically correct (Grad-CAM
+        # always fires on the top class's evidence).
+        original_full_rgb = cv2.cvtColor(uploaded_img, cv2.COLOR_BGR2RGB)
+        is_healthy_pred = int(np.argmax(preds)) == CLASS_NAMES.index("Healthy")
         try:
-            overlay_image = overlay_heatmap(original_image, heatmap)
-            Image.fromarray(overlay_image).save(GRADCAM_OUTPUT_PATH)
+            if is_healthy_pred:
+                Image.fromarray(original_full_rgb).save(gradcam_path)
+            else:
+                overlay_image = overlay_heatmap(original_full_rgb, heatmap, leaf_mask=leaf_mask)
+                Image.fromarray(overlay_image).save(gradcam_path)
         except Exception as overlay_exc:
-            print("Heatmap overlay save failed:", overlay_exc)
-            Image.fromarray(original_image).save(GRADCAM_OUTPUT_PATH)
+            print("Heatmap overlay save failed; saving original:", overlay_exc)
+            Image.fromarray(original_full_rgb).save(gradcam_path)
+
+        # Retain only the newest N artifacts to bound disk growth.
+        for prefix in ("gradcam_", "segmented_"):
+            existing = sorted(
+                STATIC_DIR.glob(f"{prefix}*.png"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for stale in existing[RUNTIME_ARTIFACT_RETENTION:]:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
 
         max_prob = float(np.max(preds[0]))
         if max_prob < 0.5 and quality_warning is None:
@@ -500,11 +563,13 @@ async def predict(
             humidity: float | str = float(weather_data["humidity"])
             wind_speed: float | str = float(weather_data["wind_speed"])
             sunlight_hours: float | str | None = weather_data.get("sunlight_hours")
+            weather_location: str = weather_data.get("location", "") or "Geolocated"
         else:
             temperature = "N/A"
             humidity = "N/A"
             wind_speed = "N/A"
             sunlight_hours = "N/A"
+            weather_location = "Unknown"
 
         if is_healthy:
             severity_pct = 0
@@ -565,6 +630,9 @@ async def predict(
                 "temperature_c": temperature,
                 "humidity_pct": humidity,
                 "wind_speed_kmh": wind_speed,
+                "location": weather_location,
+                "lat": lat,
+                "lon": lon,
                 "host_common": HOST_COMMON_NAME,
                 "host_scientific": HOST_SCIENTIFIC_NAME,
                 "pathogen": disease_info["pathogen"],
@@ -573,7 +641,8 @@ async def predict(
                 "treatment_plan": treatment_plan,
                 "leaf_pixels": leaf_pixels,
                 "min_leaf_pixels": min_leaf_pixels,
-                "heatmap_url": "/static/gradcam_result.png",
+                "heatmap_url": f"/static/{gradcam_filename}",
+                "request_id": request_id,
             }
         )
     except HTTPException:

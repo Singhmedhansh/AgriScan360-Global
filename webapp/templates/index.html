@@ -464,6 +464,21 @@
             <img id="gradcamImage" width="300" src="" alt="Grad-CAM heatmap" style="width:100%; max-height:280px; object-fit:contain; border-radius:8px; border:1px solid var(--border); background:var(--surface-2);" />
           </div>
         </div>
+        <!-- Heatmap legend -->
+        <div id="heatmapLegend" class="px-6 pb-5">
+          <div class="rounded-lg px-4 py-3" style="background:var(--surface-2); border:1px solid var(--border);">
+            <p class="mono text-xs mb-2" style="color:var(--text-muted);">HEATMAP LEGEND — model attention</p>
+            <div class="rounded-md overflow-hidden" style="height:10px; background:linear-gradient(to right, #2c1a8c 0%, #1d4ed8 18%, #06b6d4 36%, #84cc16 54%, #facc15 72%, #f97316 86%, #dc2626 100%);"></div>
+            <div class="flex justify-between mt-1.5">
+              <span class="mono text-[10px]" style="color:var(--text-muted);">low attention (blue)</span>
+              <span class="mono text-[10px]" style="color:var(--text-muted);">medium (green / yellow)</span>
+              <span class="mono text-[10px]" style="color:var(--text-muted);">high attention (red)</span>
+            </div>
+            <p id="heatmapLegendCaption" class="text-xs mt-2" style="color:var(--text-secondary);">
+              Warmer regions are where the model looked when making this prediction. Use this as a sanity check — if the heatmap fires on background or off-leaf areas, treat the diagnosis with skepticism.
+            </p>
+          </div>
+        </div>
       </div>
       </div>
 
@@ -629,7 +644,7 @@
           <span id="confidenceLevel" class="mono text-xs" style="color:var(--accent-green);">Very High</span>
           <span class="mono text-xs" style="color:var(--text-muted);">100%</span>
         </div>
-        <p class="text-xs mt-3" style="color:var(--text-secondary);">Model trained on 2.4M annotated specimens across 186 species</p>
+        <p class="text-xs mt-3" style="color:var(--text-secondary);">v2.2.2 — 5-class pathogen-group classifier (Healthy / Fungi / Bacteria / Pest / Virus)</p>
       </div>
 
       <!-- Severity -->
@@ -676,8 +691,8 @@
           <p class="mono text-xs font-medium" style="color:var(--text-muted);">RISK LEVEL</p>
         </div>
 
-        <!-- Risk pill -->
-        <div class="flex items-center justify-center py-5 rounded-xl mb-4" style="background:var(--accent-green-light); border:1px solid #b7e4c7;">
+        <!-- Risk pill (background + text colors set dynamically by updateDiagnosticMetadata) -->
+        <div id="riskPill" class="flex items-center justify-center py-5 rounded-xl mb-4" style="background:var(--accent-green-light); border:1px solid #b7e4c7;">
           <div class="text-center">
             <span id="riskLevel" class="serif text-4xl font-medium" style="color:var(--accent-green);">LOW</span>
             <p id="riskScore" class="mono text-xs mt-1" style="color:#52b788;">RISK SCORE 2/10</p>
@@ -741,7 +756,7 @@
         </div>
         <div class="mt-3 flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
           <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
-          <span>Field Block 3A · Karnataka, India</span>
+          <span id="locationLabel">Awaiting geolocation…</span>
         </div>
       </div>
 
@@ -755,15 +770,15 @@
           </div>
           <div class="flex justify-between text-xs">
             <span style="color:var(--text-secondary);">Model version</span>
-            <span class="mono" style="color:var(--text-primary);">PlantNet v4.2.1</span>
+            <span class="mono" style="color:var(--text-primary);">AgriScan v2.2.2</span>
           </div>
           <div class="flex justify-between text-xs">
             <span style="color:var(--text-secondary);">Processing time</span>
-            <span class="mono" style="color:var(--text-primary);">1.24s</span>
+            <span id="processingTime" class="mono" style="color:var(--text-primary);">--</span>
           </div>
           <div class="flex justify-between text-xs">
             <span style="color:var(--text-secondary);">Dataset</span>
-            <span class="mono" style="color:var(--text-primary);">PDDB-2024</span>
+            <span class="mono" style="color:var(--text-primary);">PLDD-Indonesia + PlantVillage</span>
           </div>
         </div>
       </div>
@@ -1689,8 +1704,26 @@
     safeSetText('diseaseDescription', result.description || 'Diagnosis description unavailable.');
 
     const riskScore = Number(result.risk_score);
-    safeSetText('riskLevel', String(result.risk_level || 'None').toUpperCase());
+    const riskLevel = String(result.risk_level || 'None').toUpperCase();
+    safeSetText('riskLevel', riskLevel);
     safeSetText('riskScore', Number.isFinite(riskScore) ? `RISK SCORE ${riskScore}/10` : 'RISK SCORE --/10');
+
+    // Dynamically theme the risk pill so MEDIUM/HIGH don't look green.
+    const riskPill = getEl('riskPill');
+    const riskLevelEl = getEl('riskLevel');
+    const riskScoreEl = getEl('riskScore');
+    const riskTheme = {
+      LOW:    { bg: 'var(--accent-green-light)', border: '#b7e4c7', text: 'var(--accent-green)', sub: '#52b788' },
+      MEDIUM: { bg: 'var(--accent-amber-light)', border: '#fde68a', text: 'var(--accent-amber)', sub: '#b45309' },
+      HIGH:   { bg: 'var(--accent-red-light)',   border: '#fecaca', text: 'var(--accent-red)',   sub: '#991b1b' },
+      NONE:   { bg: 'var(--surface-2)',          border: 'var(--border)', text: 'var(--text-muted)', sub: 'var(--text-muted)' },
+    }[riskLevel] || { bg: 'var(--surface-2)', border: 'var(--border)', text: 'var(--text-muted)', sub: 'var(--text-muted)' };
+    if (riskPill) {
+      riskPill.style.background = riskTheme.bg;
+      riskPill.style.border = `1px solid ${riskTheme.border}`;
+    }
+    if (riskLevelEl) riskLevelEl.style.color = riskTheme.text;
+    if (riskScoreEl) riskScoreEl.style.color = riskTheme.sub;
 
     const spreadProbability = Number(result.spread_probability);
     safeSetText('spreadProbability', Number.isFinite(spreadProbability) ? `${spreadProbability}%` : '--');
@@ -1720,6 +1753,27 @@
     }
 
     updateEnvironmentalPanel(result);
+
+    // Real location label from OpenWeather (city name) + lat/lon for sanity-check.
+    const locationLabelEl = getEl('locationLabel');
+    if (locationLabelEl) {
+      const city = result.location && String(result.location).trim();
+      const lat = Number(result.lat);
+      const lon = Number(result.lon);
+      const coordPart = (Number.isFinite(lat) && Number.isFinite(lon))
+        ? ` (${lat.toFixed(3)}, ${lon.toFixed(3)})`
+        : '';
+      locationLabelEl.textContent = result.weather_available === false
+        ? 'Weather unavailable'
+        : `${city || 'Geolocated'}${coordPart}`;
+    }
+
+    // Real processing time from the API.
+    const procTimeEl = getEl('processingTime');
+    if (procTimeEl) {
+      const pt = Number(result.processing_time);
+      procTimeEl.textContent = Number.isFinite(pt) ? `${pt.toFixed(2)}s` : '--';
+    }
 
     const isHealthy = result.disease_name === 'Healthy';
     const severityCard = getEl('severity-card');
@@ -1855,6 +1909,19 @@
     const gradcamImage = getEl('gradcamImage');
     if (gradcamImage && result.heatmap_url) {
       gradcamImage.src = result.heatmap_url + '?t=' + new Date().getTime();
+    }
+
+    // Update heatmap legend caption based on whether a heatmap was rendered.
+    const legendCaption = getEl('heatmapLegendCaption');
+    const legendBox = getEl('heatmapLegend');
+    if (legendCaption && legendBox) {
+      if (result.disease_name === 'Healthy') {
+        legendCaption.textContent = 'No pathogen attention regions to highlight — the leaf appears healthy. The image on the right is the original upload, shown without an overlay.';
+        legendBox.style.opacity = '0.5';
+      } else {
+        legendCaption.textContent = 'Warmer regions are where the model looked when making this prediction. Use this as a sanity check — if the heatmap fires on background or off-leaf areas, treat the diagnosis with skepticism.';
+        legendBox.style.opacity = '1';
+      }
     }
   }
 

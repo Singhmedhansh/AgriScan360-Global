@@ -25,9 +25,9 @@ models/
 *.ckpt
 *.pb
 
-# Runtime artifacts (regenerated per /predict call)
-webapp/static/gradcam_result.png
-webapp/static/segmented_leaf.png
+# Runtime artifacts (regenerated per /predict call; per-request UUID names)
+webapp/static/gradcam_*.png
+webapp/static/segmented_*.png
 
 # IDE / OS
 .vscode/
