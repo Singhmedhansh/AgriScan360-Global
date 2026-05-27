@@ -376,6 +376,7 @@ def compute_base_risk_score(severity_pct: float, confidence_score: float) -> int
 model_path_keras = MODEL_PATH
 model_path_h5 = Path(str(MODEL_PATH).replace('.keras', '.h5'))
 model: Any = None
+model_load_error: Optional[str] = None
 _model_lock = threading.Lock()
 
 
@@ -448,7 +449,7 @@ def _load_model_from_disk() -> Any:
 
 
 def get_or_load_model() -> Any:
-    global model
+    global model, model_load_error
 
     if model is not None:
         return model
@@ -464,7 +465,13 @@ def get_or_load_model() -> Any:
             )
             return None
 
-        model = _load_model_from_disk()
+        try:
+            model = _load_model_from_disk()
+            model_load_error = None if model is not None else model_load_error
+        except Exception as load_exc:
+            model = None
+            model_load_error = str(load_exc)
+            print(f"Model load failed: {model_load_error}")
         return model
 
 @app.get("/")
@@ -485,17 +492,9 @@ async def weather(lat: float = Query(...), lon: float = Query(...)):
 @app.post("/predict")
 async def predict(
     file: UploadFile = File(...),
-    lat: float = Form(...),
-    lon: float = Form(...),
+    lat: Optional[float] = Form(None),
+    lon: Optional[float] = Form(None),
 ):
-    loaded_model = get_or_load_model()
-
-    if loaded_model is None:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Model not loaded. Train the v2 model and place it at {MODEL_PATH}.",
-        )
-
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected")
 
@@ -507,6 +506,15 @@ async def predict(
 
     temp_path: Path | None = None
     try:
+        loaded_model = get_or_load_model()
+        if loaded_model is None:
+            detail = (
+                f"Model not loaded. Train the v2 model and place it at {MODEL_PATH}."
+                if not model_load_error
+                else f"Model not loaded: {model_load_error}"
+            )
+            raise HTTPException(status_code=503, detail=detail)
+
         start_time = time.time()
         suffix = Path(file.filename).suffix or ".jpg"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
@@ -515,7 +523,12 @@ async def predict(
 
         uploaded_img = cv2.imread(str(temp_path))
         if uploaded_img is None:
-            raise ValueError(f"Could not read uploaded image: {temp_path}")
+            return JSONResponse(
+                {
+                    "status": "invalid_image",
+                    "message": INVALID_IMAGE_MESSAGE,
+                }
+            )
 
         segmented_leaf, leaf_mask = segment_leaf_with_mask(uploaded_img)
         leaf_pixels = int(np.sum(leaf_mask > 0))
@@ -602,13 +615,14 @@ async def predict(
         disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Healthy"])
         treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Healthy"])
 
-        weather_available = True
-        try:
-            weather_data = get_weather(lat, lon)
-        except Exception as exc:
-            print("Weather lookup fallback in /predict:", exc)
-            weather_available = False
-            weather_data = {}
+        weather_available = False
+        weather_data: dict[str, float | str] = {}
+        if isinstance(lat, (float, int)) and isinstance(lon, (float, int)):
+            try:
+                weather_data = get_weather(float(lat), float(lon))
+                weather_available = True
+            except Exception as exc:
+                print("Weather lookup fallback in /predict:", exc)
 
         if weather_available:
             temperature: float | str = float(weather_data["temperature"])
