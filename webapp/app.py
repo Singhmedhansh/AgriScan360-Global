@@ -4,9 +4,10 @@ import json
 import os
 import sys
 from pathlib import Path
+import threading
 import tempfile
 import time
-from typing import Optional
+from typing import Any, Optional
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -16,7 +17,6 @@ import cv2
 import numpy as np
 import pytz
 import requests
-import tensorflow as tf
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -26,8 +26,6 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from src.constants import CLASS_NAMES, NUM_CLASSES
-from src.gradcam import generate_gradcam, overlay_heatmap
-from src.model import build_model
 from src.segmentation import segment_leaf as segment_leaf_with_mask
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -377,32 +375,32 @@ def compute_base_risk_score(severity_pct: float, confidence_score: float) -> int
 
 model_path_keras = MODEL_PATH
 model_path_h5 = Path(str(MODEL_PATH).replace('.keras', '.h5'))
+model: Any = None
+_model_lock = threading.Lock()
 
-if not model_path_keras.exists() and not model_path_h5.exists():
-    print(
-        f"Warning: model file not found at {model_path_keras} or {model_path_h5}. "
-        "The /predict endpoint will return 503 until the v2 model is trained."
-    )
-    model = None
-else:
-    model = None
+
+def _load_model_from_disk() -> Any:
+    import tensorflow as tf
+    from src.model import build_model
+
+    loaded_model = None
     if model_path_keras.exists():
         try:
-            model = tf.keras.models.load_model(model_path_keras, compile=False)
+            loaded_model = tf.keras.models.load_model(model_path_keras, compile=False)
             print(f"Loaded model from {model_path_keras}")
         except (ValueError, OSError) as e:
             print(f"Failed to load .keras format: {e}")
             print(f"Falling back to HDF5: {model_path_h5}")
-    if model is None:
+
+    if loaded_model is None:
         if not model_path_h5.exists():
-            raise RuntimeError(
-                f"Could not load {model_path_keras} and HDF5 fallback {model_path_h5} is missing."
-            )
-        model = tf.keras.models.load_model(model_path_h5, compile=False)
+            return None
+        loaded_model = tf.keras.models.load_model(model_path_h5, compile=False)
         print(f"Loaded model from {model_path_h5}")
-    assert model.output_shape[-1] == NUM_CLASSES, (
+
+    assert loaded_model.output_shape[-1] == NUM_CLASSES, (
         f"Model head mismatch: expected {NUM_CLASSES} classes "
-        f"(from src.constants.CLASS_NAMES), got {model.output_shape[-1]}. "
+        f"(from src.constants.CLASS_NAMES), got {loaded_model.output_shape[-1]}. "
         f"Did you load the wrong .keras file?"
     )
 
@@ -413,16 +411,17 @@ else:
     #
     # Additionally, the HDF5 saver in Keras 2.13 duplicates Variable objects when
     # some backbone layers were unfrozen during fine-tuning, producing e.g. 634
-    # weights vs 322 in a clean build.  The first N weight shapes always match,
+    # weights vs 322 in a clean build. The first N weight shapes always match,
     # so we do a partial (first-N) transfer.
     try:
         fresh_model, _ = build_model(num_classes=NUM_CLASSES)
-        loaded_weights = model.get_weights()
-        fresh_weight_count = len(fresh_model.get_weights())
+        loaded_weights = loaded_model.get_weights()
+        fresh_weights = fresh_model.get_weights()
+        fresh_weight_count = len(fresh_weights)
 
         # Shapes of the first `fresh_weight_count` weights must align.
         shapes_ok = all(
-            loaded_weights[i].shape == fresh_model.get_weights()[i].shape
+            loaded_weights[i].shape == fresh_weights[i].shape
             for i in range(min(fresh_weight_count, len(loaded_weights)))
         )
 
@@ -432,18 +431,41 @@ else:
                 np.zeros((1, 224, 224, 3), dtype=np.float32), verbose=0
             )
             assert _probe.shape[-1] == NUM_CLASSES
-            model = fresh_model
             print(
                 f"Rebuilt model with clean graph (transferred {fresh_weight_count}"
                 f"/{len(loaded_weights)} weights); inference + Grad-CAM verified."
             )
-        else:
-            print(
-                "Weight shape mismatch on rebuild; "
-                "using loaded model as-is (GradCAM may use fallback heatmap)."
-            )
+            return fresh_model
+
+        print(
+            "Weight shape mismatch on rebuild; "
+            "using loaded model as-is (GradCAM may use fallback heatmap)."
+        )
+        return loaded_model
     except Exception as rebuild_exc:
         print(f"Model graph rebuild skipped: {rebuild_exc}. Using loaded model as-is.")
+        return loaded_model
+
+
+def get_or_load_model() -> Any:
+    global model
+
+    if model is not None:
+        return model
+
+    with _model_lock:
+        if model is not None:
+            return model
+
+        if not model_path_keras.exists() and not model_path_h5.exists():
+            print(
+                f"Warning: model file not found at {model_path_keras} or {model_path_h5}. "
+                "The /predict endpoint will return 503 until the v2 model is trained."
+            )
+            return None
+
+        model = _load_model_from_disk()
+        return model
 
 @app.get("/")
 async def index(request: Request):
@@ -466,7 +488,9 @@ async def predict(
     lat: float = Form(...),
     lon: float = Form(...),
 ):
-    if model is None:
+    loaded_model = get_or_load_model()
+
+    if loaded_model is None:
         raise HTTPException(
             status_code=503,
             detail=f"Model not loaded. Train the v2 model and place it at {MODEL_PATH}.",
@@ -514,13 +538,17 @@ async def predict(
         image_batch = np.expand_dims(image_batch, axis=0)
 
         try:
-            preds = model.predict(image_batch, verbose=0)
+            preds = loaded_model.predict(image_batch, verbose=0)
         except Exception as predict_exc:
             print("model.predict failed; retrying via direct call:", predict_exc)
-            preds = model(tf.convert_to_tensor(image_batch), training=False).numpy()
+            import tensorflow as tf
+
+            preds = loaded_model(tf.convert_to_tensor(image_batch), training=False).numpy()
 
         try:
-            heatmap = generate_gradcam(model, image_batch)
+            from src.gradcam import generate_gradcam
+
+            heatmap = generate_gradcam(loaded_model, image_batch)
         except Exception as gradcam_exc:
             print("GradCAM generation failed; falling back to flat heatmap:", gradcam_exc)
             heatmap = np.zeros((224, 224), dtype=np.float32)
@@ -541,6 +569,8 @@ async def predict(
             if is_healthy_pred:
                 Image.fromarray(original_full_rgb).save(gradcam_path)
             else:
+                from src.gradcam import overlay_heatmap
+
                 overlay_image = overlay_heatmap(original_full_rgb, heatmap, leaf_mask=leaf_mask)
                 Image.fromarray(overlay_image).save(gradcam_path)
         except Exception as overlay_exc:
