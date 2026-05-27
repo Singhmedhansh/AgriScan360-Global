@@ -19,9 +19,12 @@ plant_dataset_merged/
 plant_dataset_staging/
 
 # Trained models and eval artifacts (regenerable from src/train.py)
-outputs/
+outputs/*
+!outputs/potato_model_v2.keras
+!outputs/potato_model_v2.h5
 models/
 *.h5
+!outputs/potato_model_v2.h5
 *.ckpt
 *.pb
 
