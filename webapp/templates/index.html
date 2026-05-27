@@ -482,6 +482,110 @@
       </div>
       </div>
 
+      <!-- Field Sensor Telemetry (full-width, lives between Grad-CAM and Treatment Protocol) -->
+      <div id="sensorTelemetrySection" class="fade-up fade-up-3 rounded-xl" style="display:none; background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;">
+        <div class="px-6 pt-5 pb-4 flex items-start justify-between gap-3" style="border-bottom:1px solid var(--border);">
+          <div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="cpu" style="width:14px;height:14px;color:var(--text-secondary);"></i>
+              <p class="mono text-xs" style="color:var(--text-muted);">FIELD SENSOR TELEMETRY</p>
+            </div>
+            <h3 class="font-semibold text-base mt-1" style="color:var(--text-primary);">Live readings from in-field IoT device</h3>
+          </div>
+          <div id="sensorStatusPill" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium flex-shrink-0" style="background:#dcfce7;color:#166534;border:1px solid #86efac;">
+            <span id="sensorStatusDot" class="inline-block rounded-full animate-pulse" style="width:6px;height:6px;background:#22c55e;"></span>
+            <span id="sensorStatusLabel">Live</span>
+          </div>
+        </div>
+
+        <div class="px-6 py-5">
+          <div id="sensorTilesGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3" style="transition: opacity 0.3s ease;">
+            <div class="rounded-lg p-4" style="background:var(--surface-2); border:1px solid var(--border);">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="droplet" style="width:13px;height:13px;color:var(--accent-green);"></i>
+                <p class="mono text-[10px]" style="color:var(--text-muted);">SOIL MOISTURE</p>
+              </div>
+              <p id="sensorSoilValue" class="mono text-2xl font-medium mt-1" style="color:var(--accent-green); transition: color 0.3s ease;">--%</p>
+              <div class="rounded-full overflow-hidden mt-2" style="background:var(--surface); height:5px; border:1px solid var(--border);">
+                <div id="sensorSoilBar" class="h-full rounded-full" style="background:var(--accent-green); width:0%; transition: width 0.6s ease, background 0.3s ease;"></div>
+              </div>
+              <p class="text-[11px] mt-2" style="color:var(--text-muted);">Optimal: 40–70%</p>
+            </div>
+            <div class="rounded-lg p-4" style="background:var(--surface-2); border:1px solid var(--border);">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="thermometer" style="width:13px;height:13px;color:var(--accent-amber);"></i>
+                <p class="mono text-[10px]" style="color:var(--text-muted);">AIR TEMPERATURE</p>
+              </div>
+              <p id="sensorTempValue" class="mono text-2xl font-medium mt-1" style="color:var(--text-primary);">--°C</p>
+              <p class="text-[11px] mt-2" style="color:var(--text-muted);">Healthy range: 22–32°C</p>
+            </div>
+            <div class="rounded-lg p-4" style="background:var(--surface-2); border:1px solid var(--border);">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="droplets" style="width:13px;height:13px;color:var(--accent-blue);"></i>
+                <p class="mono text-[10px]" style="color:var(--text-muted);">AIR HUMIDITY</p>
+              </div>
+              <p id="sensorHumValue" class="mono text-2xl font-medium mt-1" style="color:var(--text-primary);">--%</p>
+              <p class="text-[11px] mt-2" style="color:var(--text-muted);">Optimal: 55–85%</p>
+            </div>
+          </div>
+
+          <p id="sensorEmptyState" class="text-xs mt-3 hidden" style="color:var(--text-muted);">No sensor data yet — start the simulator or connect the field device.</p>
+
+          <div id="sensorMetaStrip" class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style="color:var(--text-muted);">
+            <span>Device: <span id="sensorDeviceLabel" class="mono" style="color:var(--text-secondary);">--</span></span>
+            <span style="color:var(--border);">|</span>
+            <span>Last reading: <span id="sensorLastReading" class="mono" style="color:var(--text-secondary);">--</span></span>
+            <span style="color:var(--border);">|</span>
+            <span>Records logged: <span id="sensorTotalRecords" class="mono" style="color:var(--text-secondary);">--</span></span>
+          </div>
+
+          <div class="flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm mt-4 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div>
+              <div class="font-semibold">Demo Mode — Simulated Telemetry</div>
+              <div class="text-amber-800 text-[13px] mt-0.5 leading-relaxed">
+                Hardware IoT device is not yet connected. Live values shown are generated by a simulator (<span class="mono">scripts/thingspeak_simulator.py</span>) using a bounded random-walk model to mimic plausible field conditions.
+                <strong>Phase 2 deliverable:</strong> ESP8266 NodeMCU + capacitive soil moisture sensor + DHT22 temperature/humidity sensor → ThingSpeak ingestion, replacing simulated data with real field readings.
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#16a34a;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 1 — SOIL MOISTURE (%)</p>
+              </div>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
+                <iframe src="https://thingspeak.com/channels/3376912/charts/1?bgcolor=%23ffffff&color=%2316a34a&dynamic=true&type=line&update=15&width=900&height=280&title=Soil+Moisture" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Soil Moisture chart" style="display:block;border:0;"></iframe>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#dc2626;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 2 — AIR TEMPERATURE (°C)</p>
+              </div>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
+                <iframe src="https://thingspeak.com/channels/3376912/charts/2?bgcolor=%23ffffff&color=%23dc2626&dynamic=true&type=line&update=15&width=900&height=280&title=Air+Temperature" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Air Temperature chart" style="display:block;border:0;"></iframe>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#2563eb;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 3 — AIR HUMIDITY (%)</p>
+              </div>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
+                <iframe src="https://thingspeak.com/channels/3376912/charts/3?bgcolor=%23ffffff&color=%232563eb&dynamic=true&type=line&update=15&width=900&height=280&title=Air+Humidity" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Air Humidity chart" style="display:block;border:0;"></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Action Plan -->
       <div id="actionPlan" class="fade-up fade-up-3 rounded-xl" style="display:none; background:var(--surface); border:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,0.04);">
         <div class="px-6 pt-5 pb-4 flex items-center justify-between" style="border-bottom:1px solid var(--border);">
@@ -1467,6 +1571,7 @@
     safeSetDisplay('diagnosisPanel', 'none');
     safeSetDisplay('actionPlan', 'none');
     safeSetDisplay('metricsPanel', 'none');
+    safeSetDisplay('sensorTelemetrySection', 'none');
     safeSetText('diseaseName', '');
     safeSetText('confidenceScore', '0%');
     safeSetText('severityIndex', '0%');
@@ -1905,6 +2010,10 @@
     safeSetDisplay('diagnosisPanel', 'block');
     safeSetDisplay('actionPlan', 'block');
     safeSetDisplay('metricsPanel', 'flex');
+    safeSetDisplay('sensorTelemetrySection', 'block');
+    if (typeof window.startSensorPolling === 'function') {
+      window.startSensorPolling();
+    }
 
     const gradcamImage = getEl('gradcamImage');
     if (gradcamImage && result.heatmap_url) {
@@ -1992,6 +2101,150 @@
   async function runDiagnostics() {
     await runDiagnosis();
   }
+
+  // ─────────── Field Sensor Telemetry polling ───────────
+  (function () {
+    const POLL_INTERVAL_MS = 10000;
+    const STALE_AGE_MS = 60000;
+    const FAILURE_THRESHOLD = 3;
+    let consecutiveFailures = 0;
+
+    const istFmt = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+
+    function formatIst(dateLike) {
+      if (!dateLike) return '--';
+      const d = new Date(dateLike);
+      if (Number.isNaN(d.getTime())) return '--';
+      const parts = Object.fromEntries(istFmt.formatToParts(d).map(p => [p.type, p.value]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} IST`;
+    }
+
+    function setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function setStatus(state) {
+      const pill = document.getElementById('sensorStatusPill');
+      const dot = document.getElementById('sensorStatusDot');
+      const label = document.getElementById('sensorStatusLabel');
+      const tiles = document.getElementById('sensorTilesGrid');
+      if (!pill || !dot || !label) return;
+
+      let bg, fg, border, dotColor, text, dim;
+      if (state === 'live') {
+        bg = '#dcfce7'; fg = '#166534'; border = '#86efac'; dotColor = '#22c55e';
+        text = 'Live'; dim = false;
+        dot.classList.add('animate-pulse');
+      } else if (state === 'stale') {
+        bg = '#fef3c7'; fg = '#92400e'; border = '#fde68a'; dotColor = '#f59e0b';
+        text = 'Stale'; dim = true;
+        dot.classList.remove('animate-pulse');
+      } else {
+        bg = '#fee2e2'; fg = '#991b1b'; border = '#fecaca'; dotColor = '#ef4444';
+        text = 'Disconnected'; dim = true;
+        dot.classList.remove('animate-pulse');
+      }
+      pill.style.background = bg;
+      pill.style.color = fg;
+      pill.style.borderColor = border;
+      dot.style.background = dotColor;
+      label.textContent = text;
+      if (tiles) tiles.style.opacity = dim ? '0.55' : '1';
+    }
+
+    function applyRecord(rec) {
+      const soil = Number(rec.soil_moisture);
+      const temp = Number(rec.air_temp);
+      const hum = Number(rec.air_humidity);
+
+      setText('sensorSoilValue', Number.isFinite(soil) ? `${soil.toFixed(1)}%` : '--%');
+      setText('sensorTempValue', Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : '--°C');
+      setText('sensorHumValue', Number.isFinite(hum) ? `${hum.toFixed(1)}%` : '--%');
+
+      const soilColor = (Number.isFinite(soil) && soil >= 40 && soil <= 70) ? '#16a34a' : '#d97706';
+      const soilValueEl = document.getElementById('sensorSoilValue');
+      const soilBarEl = document.getElementById('sensorSoilBar');
+      if (soilValueEl) soilValueEl.style.color = soilColor;
+      if (soilBarEl) {
+        const pct = Number.isFinite(soil) ? Math.max(0, Math.min(100, soil)) : 0;
+        soilBarEl.style.width = `${pct}%`;
+        soilBarEl.style.background = soilColor;
+      }
+
+      setText('sensorDeviceLabel', rec.device_id || '--');
+      setText('sensorLastReading', formatIst(rec.received_at || rec.timestamp));
+
+      const empty = document.getElementById('sensorEmptyState');
+      const tiles = document.getElementById('sensorTilesGrid');
+      if (empty) empty.classList.add('hidden');
+      if (tiles) tiles.classList.remove('hidden');
+    }
+
+    function showEmptyState() {
+      const empty = document.getElementById('sensorEmptyState');
+      if (empty) empty.classList.remove('hidden');
+      setText('sensorSoilValue', '--%');
+      setText('sensorTempValue', '--°C');
+      setText('sensorHumValue', '--%');
+      setText('sensorDeviceLabel', '--');
+      setText('sensorLastReading', '--');
+      const bar = document.getElementById('sensorSoilBar');
+      if (bar) bar.style.width = '0%';
+    }
+
+    async function tickSensors() {
+      try {
+        const [latestRes, healthRes] = await Promise.all([
+          fetch('/sensor_data/latest?n=1', { cache: 'no-store' }),
+          fetch('/sensor_data/health', { cache: 'no-store' }),
+        ]);
+        if (!latestRes.ok || !healthRes.ok) {
+          throw new Error(`HTTP ${latestRes.status}/${healthRes.status}`);
+        }
+        const latest = await latestRes.json();
+        const health = await healthRes.json();
+
+        consecutiveFailures = 0;
+        setText('sensorTotalRecords', Number.isFinite(health.total_records) ? String(health.total_records) : '--');
+
+        const records = Array.isArray(latest.records) ? latest.records : [];
+        if (records.length === 0) {
+          showEmptyState();
+          setStatus('stale');
+          return;
+        }
+
+        const rec = records[0];
+        applyRecord(rec);
+
+        const lastTs = rec.received_at || rec.timestamp || health.last_received_at;
+        const ageMs = lastTs ? (Date.now() - new Date(lastTs).getTime()) : Infinity;
+        setStatus(ageMs > STALE_AGE_MS ? 'stale' : 'live');
+      } catch (err) {
+        consecutiveFailures += 1;
+        console.warn('Sensor poll failed:', err);
+        setStatus(consecutiveFailures >= FAILURE_THRESHOLD ? 'disconnected' : 'stale');
+      }
+    }
+
+    let pollingHandle = null;
+    window.startSensorPolling = function () {
+      if (pollingHandle !== null) return;
+      tickSensors();
+      pollingHandle = setInterval(tickSensors, POLL_INTERVAL_MS);
+    };
+    window.stopSensorPolling = function () {
+      if (pollingHandle === null) return;
+      clearInterval(pollingHandle);
+      pollingHandle = null;
+    };
+  })();
 
   document.addEventListener('DOMContentLoaded', function() {
     console.log('AgriScan UI loaded');

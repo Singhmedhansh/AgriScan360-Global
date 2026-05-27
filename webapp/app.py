@@ -1,9 +1,16 @@
+import asyncio
 from datetime import datetime
+import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import time
+from typing import Optional
 import uuid
+from zoneinfo import ZoneInfo
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
 import numpy as np
@@ -16,6 +23,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from pydantic import BaseModel, Field
 
 from src.constants import CLASS_NAMES, NUM_CLASSES
 from src.gradcam import generate_gradcam, overlay_heatmap
@@ -182,9 +190,23 @@ TREATMENT_PROTOCOLS = {
     },
 }
 
+SENSOR_LOG_PATH = WEBAPP_DIR / "data" / "sensor_log.jsonl"
+IST = ZoneInfo("Asia/Kolkata")
+_sensor_log_lock = asyncio.Lock()
+
+
+class SensorReading(BaseModel):
+    device_id: str = Field(..., min_length=1, max_length=64)
+    soil_moisture: float = Field(..., ge=0, le=100)
+    air_temp: float = Field(..., ge=-10, le=60)
+    air_humidity: float = Field(..., ge=0, le=100)
+    timestamp: Optional[str] = None
+
+
 app = FastAPI()
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
+SENSOR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Serve static assets from /static.
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -654,6 +676,107 @@ async def predict(
         await file.close()
         if temp_path and temp_path.exists():
             temp_path.unlink(missing_ok=True)
+
+
+@app.post("/sensor_data")
+async def ingest_sensor_data(reading: SensorReading):
+    """Ingest a single sensor reading and append it to the JSONL telemetry log."""
+    record_id = str(uuid.uuid4())
+    received_at = datetime.now(IST).isoformat()
+    timestamp = reading.timestamp or received_at
+
+    record = {
+        "record_id": record_id,
+        "device_id": reading.device_id,
+        "soil_moisture": reading.soil_moisture,
+        "air_temp": reading.air_temp,
+        "air_humidity": reading.air_humidity,
+        "timestamp": timestamp,
+        "received_at": received_at,
+    }
+
+    line = json.dumps(record) + "\n"
+    async with _sensor_log_lock:
+        with open(SENSOR_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line)
+            f.flush()
+            os.fsync(f.fileno())
+
+    print(
+        f"[sensor] {reading.device_id} soil={reading.soil_moisture}% "
+        f"temp={reading.air_temp}C hum={reading.air_humidity}%"
+    )
+
+    return {"status": "ok", "record_id": record_id, "received_at": received_at}
+
+
+@app.get("/sensor_data/latest")
+async def get_latest_sensor_data(n: int = Query(10, ge=1, le=100)):
+    """Return the newest-first n valid sensor records from the telemetry log."""
+    if not SENSOR_LOG_PATH.exists():
+        return {"records": [], "count": 0}
+
+    with open(SENSOR_LOG_PATH, "r", encoding="utf-8") as f:
+        raw_lines = f.readlines()
+
+    if not raw_lines:
+        return {"records": [], "count": 0}
+
+    records: list[dict] = []
+    for line in reversed(raw_lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+        if len(records) >= n:
+            break
+
+    return {"records": records, "count": len(records)}
+
+
+@app.get("/sensor_data/health")
+async def sensor_pipeline_health():
+    """Return ingest pipeline liveness: total records, last receipt time, recent device set."""
+    if not SENSOR_LOG_PATH.exists():
+        return {"total_records": 0, "last_received_at": None, "devices_seen": []}
+
+    total_records = 0
+    last_received_at: Optional[str] = None
+    recent_devices: list[str] = []
+
+    with open(SENSOR_LOG_PATH, "r", encoding="utf-8") as f:
+        raw_lines = f.readlines()
+
+    parsed_lines: list[dict] = []
+    for line in raw_lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed_lines.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    total_records = len(parsed_lines)
+    if parsed_lines:
+        last_received_at = parsed_lines[-1].get("received_at")
+        seen_order: list[str] = []
+        seen_set: set[str] = set()
+        for rec in parsed_lines[-100:]:
+            dev = rec.get("device_id")
+            if isinstance(dev, str) and dev not in seen_set:
+                seen_set.add(dev)
+                seen_order.append(dev)
+        recent_devices = seen_order
+
+    return {
+        "total_records": total_records,
+        "last_received_at": last_received_at,
+        "devices_seen": recent_devices,
+    }
 
 
 if __name__ == "__main__":

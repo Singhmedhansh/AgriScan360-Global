@@ -205,6 +205,14 @@ echo $env:OPENWEATHER_API_KEY
 ### 5. Run the FastAPI app
 
 ```powershell
+python run.py
+```
+
+Alternatively, you can launch directly with uvicorn or by invoking the app module:
+
+```powershell
+python -m uvicorn webapp.app:app --host 127.0.0.1 --port 8000
+# or
 python webapp\app.py
 ```
 
@@ -245,8 +253,12 @@ python -m src.train
 # 5. Configure OpenWeather API key
 setx OPENWEATHER_API_KEY "your_key"   # Windows; reopen terminal after setx
 
-# 6. Run the FastAPI app
-python webapp\app.py
+# 6. Run the FastAPI app (canonical)
+python run.py
+
+# Alternatives:
+# python -m uvicorn webapp.app:app --host 127.0.0.1 --port 8000
+# python webapp\app.py
 ```
 
 ## Evaluation
