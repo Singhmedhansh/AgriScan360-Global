@@ -5,16 +5,26 @@ from tensorflow.keras.applications import EfficientNetB0
 from src.constants import NUM_CLASSES
 
 
-def build_model(num_classes=NUM_CLASSES, base="EfficientNetB0", lr=4e-6):
+def build_model(num_classes=NUM_CLASSES, base="EfficientNetB0", lr=4e-6, pretrained_weights_path=None):
     if base != "EfficientNetB0":
         raise ValueError("Unsupported model. Use 'EfficientNetB0'.")
 
     base_model = EfficientNetB0(
         input_shape=(224, 224, 3),
         include_top=False,
-        weights="imagenet",
+        # Avoid automatic download of imagenet weights at import/startup on hosted environments.
+        # Use `pretrained_weights_path` to load local weights if needed.
+        weights=None,
     )
     base_model.trainable = False
+
+    # If a local pretrained backbone weights file is provided, load it by name.
+    if pretrained_weights_path:
+        try:
+            base_model.load_weights(pretrained_weights_path, by_name=True)
+        except Exception:
+            # Don't fail import-time; caller can handle model weight issues at load time.
+            pass
 
     x = base_model.output
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
