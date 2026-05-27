@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: agriscan360
+    runtime: python
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python run.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: OPENWEATHER_API_KEY
+        sync: false

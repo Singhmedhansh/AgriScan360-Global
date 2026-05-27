@@ -224,6 +224,38 @@ Open: `http://127.0.0.1:8000`
 - `GET /weather?lat=..&lon=..`: Weather data fetch
 - `POST /predict`: Full diagnosis + XAI + weather-aware advisory
 
+## Deploy on Render (v2)
+
+This repository now includes a Render Blueprint file at `render.yaml`.
+
+### Option A: Blueprint deploy (recommended)
+
+1. Push this repo to GitHub.
+2. In Render, click **New +** -> **Blueprint**.
+3. Select this repository.
+4. Set `OPENWEATHER_API_KEY` in Render environment variables.
+5. Deploy.
+
+Render uses:
+
+- Build command: `pip install --upgrade pip && pip install -r requirements.txt`
+- Start command: `python run.py`
+- Python version: `3.11.9`
+
+### Option B: Manual Web Service
+
+If you create the service manually, use:
+
+- Runtime: Python
+- Build command: `pip install --upgrade pip && pip install -r requirements.txt`
+- Start command: `python run.py`
+- Environment variable: `OPENWEATHER_API_KEY=<your_key>`
+
+Notes:
+
+- `run.py` reads `PORT` from Render automatically.
+- Sensor logs under `webapp/data/sensor_log.jsonl` are ephemeral on free instances.
+
 ## Model Artifacts
 
 - Trained model paths (v2): `outputs/potato_model_v2.keras` (preferred) and `outputs/potato_model_v2.h5` (fallback). `webapp/app.py` tries `.keras` first and falls back to `.h5` automatically — see "Known Limitations" below for why both formats are saved.
