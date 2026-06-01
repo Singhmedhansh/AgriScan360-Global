@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AgriScan 360 — Plant Diagnostics</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
@@ -539,7 +540,12 @@
             <span>Records logged: <span id="sensorTotalRecords" class="mono" style="color:var(--text-secondary);">--</span></span>
           </div>
 
-          <div class="flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm mt-4 mb-4">
+          <div class="mt-3 flex flex-wrap items-center gap-4 text-[11px]" style="color:var(--text-muted);">
+            <span class="flex items-center gap-1.5"><span style="width:18px;height:0;border-top:2px solid #111827;display:inline-block;"></span>Live readings</span>
+            <span class="flex items-center gap-1.5"><span style="width:18px;height:0;border-top:2px dashed #6b7280;display:inline-block;"></span>Optimal range</span>
+          </div>
+
+          <div id="sensorDemoBanner" class="flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm mt-4 mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -560,8 +566,9 @@
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#16a34a;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 1 — SOIL MOISTURE (%)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
-                <iframe src="https://thingspeak.com/channels/3376912/charts/1?bgcolor=%23ffffff&color=%2316a34a&dynamic=true&type=line&update=15&width=900&height=280&title=Soil+Moisture" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Soil Moisture chart" style="display:block;border:0;"></iframe>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 40–70%</div>
+                <canvas id="soilMoistureChart" height="260"></canvas>
               </div>
             </div>
             <div>
@@ -569,8 +576,9 @@
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#dc2626;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 2 — AIR TEMPERATURE (°C)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
-                <iframe src="https://thingspeak.com/channels/3376912/charts/2?bgcolor=%23ffffff&color=%23dc2626&dynamic=true&type=line&update=15&width=900&height=280&title=Air+Temperature" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Air Temperature chart" style="display:block;border:0;"></iframe>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 22–32°C</div>
+                <canvas id="temperatureChart" height="260"></canvas>
               </div>
             </div>
             <div>
@@ -578,8 +586,9 @@
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#2563eb;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 3 — AIR HUMIDITY (%)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px;">
-                <iframe src="https://thingspeak.com/channels/3376912/charts/3?bgcolor=%23ffffff&color=%232563eb&dynamic=true&type=line&update=15&width=900&height=280&title=Air+Humidity" width="100%" height="300" frameborder="0" scrolling="no" loading="lazy" title="ThingSpeak Air Humidity chart" style="display:block;border:0;"></iframe>
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 55–85%</div>
+                <canvas id="humidityChart" height="260"></canvas>
               </div>
             </div>
           </div>
@@ -2104,24 +2113,77 @@
 
   // ─────────── Field Sensor Telemetry polling ───────────
   (function () {
-    const POLL_INTERVAL_MS = 10000;
-    const STALE_AGE_MS = 60000;
-    const FAILURE_THRESHOLD = 3;
-    let consecutiveFailures = 0;
-
-    const istFmt = new Intl.DateTimeFormat('en-IN', {
+    const POLL_INTERVAL_MS = 15000;
+    const THINGSPEAK_FEEDS_URL = 'https://api.thingspeak.com/channels/3376912/feeds.json?results=20';
+    const IST_OPTIONS = {
       timeZone: 'Asia/Kolkata',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
       hour12: false,
-    });
+    };
+
+    const chartState = {
+      temperature: null,
+      humidity: null,
+      soil: null,
+    };
+
+    const chartDefs = [
+      {
+        key: 'soil',
+        canvasId: 'soilMoistureChart',
+        field: 'field3',
+        lineColor: '#16a34a',
+        label: 'Live readings',
+        min: 40,
+        max: 70,
+        optimalLabel: 'Optimal range 40–70%',
+      },
+      {
+        key: 'temperature',
+        canvasId: 'temperatureChart',
+        field: 'field1',
+        lineColor: '#dc2626',
+        label: 'Live readings',
+        min: 22,
+        max: 32,
+        optimalLabel: 'Optimal range 22–32°C',
+      },
+      {
+        key: 'humidity',
+        canvasId: 'humidityChart',
+        field: 'field2',
+        lineColor: '#2563eb',
+        label: 'Live readings',
+        min: 55,
+        max: 85,
+        optimalLabel: 'Optimal range 55–85%',
+      },
+    ];
+
+    const chartInstances = new Map();
+    let pollingHandle = null;
 
     function formatIst(dateLike) {
       if (!dateLike) return '--';
-      const d = new Date(dateLike);
-      if (Number.isNaN(d.getTime())) return '--';
-      const parts = Object.fromEntries(istFmt.formatToParts(d).map(p => [p.type, p.value]));
-      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} IST`;
+      const parsed = new Date(dateLike);
+      if (Number.isNaN(parsed.getTime())) return '--';
+      return new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(parsed).replace(',', '');
+    }
+
+    function formatChartTime(dateLike) {
+      const parsed = new Date(dateLike);
+      if (Number.isNaN(parsed.getTime())) return '--';
+      return new Intl.DateTimeFormat('en-IN', IST_OPTIONS).format(parsed);
     }
 
     function setText(id, text) {
@@ -2129,116 +2191,232 @@
       if (el) el.textContent = text;
     }
 
-    function setStatus(state) {
+    function setStatus(isLive) {
       const pill = document.getElementById('sensorStatusPill');
       const dot = document.getElementById('sensorStatusDot');
       const label = document.getElementById('sensorStatusLabel');
       const tiles = document.getElementById('sensorTilesGrid');
       if (!pill || !dot || !label) return;
 
-      let bg, fg, border, dotColor, text, dim;
-      if (state === 'live') {
-        bg = '#dcfce7'; fg = '#166534'; border = '#86efac'; dotColor = '#22c55e';
-        text = 'Live'; dim = false;
+      if (isLive) {
+        pill.style.background = '#dcfce7';
+        pill.style.color = '#166534';
+        pill.style.borderColor = '#86efac';
+        dot.style.background = '#22c55e';
         dot.classList.add('animate-pulse');
-      } else if (state === 'stale') {
-        bg = '#fef3c7'; fg = '#92400e'; border = '#fde68a'; dotColor = '#f59e0b';
-        text = 'Stale'; dim = true;
-        dot.classList.remove('animate-pulse');
+        label.textContent = 'Live';
+        if (tiles) tiles.style.opacity = '1';
       } else {
-        bg = '#fee2e2'; fg = '#991b1b'; border = '#fecaca'; dotColor = '#ef4444';
-        text = 'Disconnected'; dim = true;
+        pill.style.background = '#fef3c7';
+        pill.style.color = '#92400e';
+        pill.style.borderColor = '#fde68a';
+        dot.style.background = '#f59e0b';
         dot.classList.remove('animate-pulse');
+        label.textContent = 'Stale';
+        if (tiles) tiles.style.opacity = '0.72';
       }
-      pill.style.background = bg;
-      pill.style.color = fg;
-      pill.style.borderColor = border;
-      dot.style.background = dotColor;
-      label.textContent = text;
-      if (tiles) tiles.style.opacity = dim ? '0.55' : '1';
     }
 
-    function applyRecord(rec) {
-      const soil = Number(rec.soil_moisture);
-      const temp = Number(rec.air_temp);
-      const hum = Number(rec.air_humidity);
+    function setDemoBannerVisible(isLive) {
+      const banner = document.getElementById('sensorDemoBanner');
+      if (!banner) return;
+      banner.style.display = isLive ? 'none' : '';
+    }
 
-      setText('sensorSoilValue', Number.isFinite(soil) ? `${soil.toFixed(1)}%` : '--%');
-      setText('sensorTempValue', Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : '--°C');
-      setText('sensorHumValue', Number.isFinite(hum) ? `${hum.toFixed(1)}%` : '--%');
+    function updateSensorCards(data) {
+      const temperature = Number(data.temperature);
+      const humidity = Number(data.humidity);
+      const soil = data.soil_moisture === null || data.soil_moisture === undefined ? null : Number(data.soil_moisture);
+      const isLive = Boolean(data.is_live);
 
-      const soilColor = (Number.isFinite(soil) && soil >= 40 && soil <= 70) ? '#16a34a' : '#d97706';
+      setText('sensorTempValue', Number.isFinite(temperature) ? `${temperature.toFixed(1)}°C` : '--°C');
+      setText('sensorHumValue', Number.isFinite(humidity) ? `${humidity.toFixed(1)}%` : '--%');
+
       const soilValueEl = document.getElementById('sensorSoilValue');
       const soilBarEl = document.getElementById('sensorSoilBar');
-      if (soilValueEl) soilValueEl.style.color = soilColor;
+      if (soilValueEl) {
+        if (Number.isFinite(soil)) {
+          soilValueEl.textContent = `${soil.toFixed(1)}%`;
+          soilValueEl.title = '';
+          soilValueEl.style.color = soil >= 40 && soil <= 70 ? '#16a34a' : '#d97706';
+        } else {
+          soilValueEl.textContent = '--%';
+          soilValueEl.title = 'Sensor arrives Wednesday';
+          soilValueEl.style.color = 'var(--text-secondary)';
+        }
+      }
       if (soilBarEl) {
-        const pct = Number.isFinite(soil) ? Math.max(0, Math.min(100, soil)) : 0;
-        soilBarEl.style.width = `${pct}%`;
-        soilBarEl.style.background = soilColor;
+        const width = Number.isFinite(soil) ? Math.max(0, Math.min(100, soil)) : 0;
+        soilBarEl.style.width = `${width}%`;
+        soilBarEl.style.background = Number.isFinite(soil) && soil >= 40 && soil <= 70 ? '#16a34a' : '#d97706';
       }
 
-      setText('sensorDeviceLabel', rec.device_id || '--');
-      setText('sensorLastReading', formatIst(rec.received_at || rec.timestamp));
+      setText('sensorDeviceLabel', data.device_name || '--');
+      setText('sensorLastReading', data.last_updated || '--');
+      const recordCount = data.records_logged;
+      setText('sensorTotalRecords', recordCount === null || recordCount === undefined || recordCount === '' ? '--' : String(recordCount));
 
-      const empty = document.getElementById('sensorEmptyState');
-      const tiles = document.getElementById('sensorTilesGrid');
-      if (empty) empty.classList.add('hidden');
-      if (tiles) tiles.classList.remove('hidden');
+      setStatus(isLive);
+      setDemoBannerVisible(isLive);
     }
 
-    function showEmptyState() {
-      const empty = document.getElementById('sensorEmptyState');
-      if (empty) empty.classList.remove('hidden');
-      setText('sensorSoilValue', '--%');
-      setText('sensorTempValue', '--°C');
-      setText('sensorHumValue', '--%');
-      setText('sensorDeviceLabel', '--');
-      setText('sensorLastReading', '--');
-      const bar = document.getElementById('sensorSoilBar');
-      if (bar) bar.style.width = '0%';
+    function buildChartDatasets(points, lineColor, minValue, maxValue) {
+      const labels = points.map(point => point.label);
+      const dataPoints = points.map(point => point.value);
+      const minLine = points.map(() => minValue);
+      const maxLine = points.map(() => maxValue);
+
+      return {
+        labels,
+        datasets: [
+          {
+            label: 'Live readings',
+            data: dataPoints,
+            borderColor: lineColor,
+            backgroundColor: lineColor,
+            pointRadius: 0,
+            borderWidth: 2.5,
+            tension: 0.35,
+            spanGaps: true,
+            fill: false,
+          },
+          {
+            label: 'Optimal min',
+            data: minLine,
+            borderColor: '#6b7280',
+            backgroundColor: '#6b7280',
+            borderDash: [5, 5],
+            pointRadius: 0,
+            borderWidth: 1.5,
+            tension: 0,
+            fill: false,
+          },
+          {
+            label: 'Optimal max',
+            data: maxLine,
+            borderColor: '#6b7280',
+            backgroundColor: '#6b7280',
+            borderDash: [5, 5],
+            pointRadius: 0,
+            borderWidth: 1.5,
+            tension: 0,
+            fill: false,
+          },
+        ],
+      };
+    }
+
+    function ensureChart(def, points) {
+      const canvas = document.getElementById(def.canvasId);
+      if (!canvas || !window.Chart) return;
+
+      const series = buildChartDatasets(points, def.lineColor, def.min, def.max);
+      const existing = chartInstances.get(def.key);
+      if (existing) {
+        existing.data = series;
+        existing.update('none');
+        return;
+      }
+
+      const context = canvas.getContext('2d');
+      const chart = new Chart(context, {
+        type: 'line',
+        data: series,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: {
+              display: false,
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+            },
+          },
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(107,114,128,0.1)',
+              },
+              ticks: {
+                color: '#6b7280',
+                maxRotation: 0,
+                autoSkip: true,
+              },
+            },
+            y: {
+              grid: {
+                color: 'rgba(107,114,128,0.12)',
+              },
+              ticks: {
+                color: '#6b7280',
+              },
+            },
+          },
+        },
+      });
+
+      chartInstances.set(def.key, chart);
+    }
+
+    function updateCharts(feeds) {
+      const safeFeeds = Array.isArray(feeds) ? feeds : [];
+      const pointsByKey = {
+        soil: [],
+        temperature: [],
+        humidity: [],
+      };
+
+      for (const feed of safeFeeds) {
+        const label = formatChartTime(feed.created_at);
+        pointsByKey.soil.push({ label, value: feed.field3 === null || feed.field3 === undefined || feed.field3 === '' ? null : Number(feed.field3) });
+        pointsByKey.temperature.push({ label, value: feed.field1 === null || feed.field1 === undefined || feed.field1 === '' ? null : Number(feed.field1) });
+        pointsByKey.humidity.push({ label, value: feed.field2 === null || feed.field2 === undefined || feed.field2 === '' ? null : Number(feed.field2) });
+      }
+
+      for (const def of chartDefs) {
+        ensureChart(def, pointsByKey[def.key]);
+      }
     }
 
     async function tickSensors() {
       try {
-        const [latestRes, healthRes] = await Promise.all([
-          fetch('/sensor_data/latest?n=1', { cache: 'no-store' }),
-          fetch('/sensor_data/health', { cache: 'no-store' }),
+        const [telemetryResponse, feedsResponse] = await Promise.all([
+          fetch('/api/telemetry', { cache: 'no-store' }),
+          fetch(THINGSPEAK_FEEDS_URL, { cache: 'no-store' }),
         ]);
-        if (!latestRes.ok || !healthRes.ok) {
-          throw new Error(`HTTP ${latestRes.status}/${healthRes.status}`);
-        }
-        const latest = await latestRes.json();
-        const health = await healthRes.json();
 
-        consecutiveFailures = 0;
-        setText('sensorTotalRecords', Number.isFinite(health.total_records) ? String(health.total_records) : '--');
-
-        const records = Array.isArray(latest.records) ? latest.records : [];
-        if (records.length === 0) {
-          showEmptyState();
-          setStatus('stale');
-          return;
+        if (telemetryResponse.ok) {
+          const telemetry = await telemetryResponse.json();
+          updateSensorCards(telemetry);
+        } else {
+          setStatus(false);
+          setDemoBannerVisible(false);
         }
 
-        const rec = records[0];
-        applyRecord(rec);
-
-        const lastTs = rec.received_at || rec.timestamp || health.last_received_at;
-        const ageMs = lastTs ? (Date.now() - new Date(lastTs).getTime()) : Infinity;
-        setStatus(ageMs > STALE_AGE_MS ? 'stale' : 'live');
-      } catch (err) {
-        consecutiveFailures += 1;
-        console.warn('Sensor poll failed:', err);
-        setStatus(consecutiveFailures >= FAILURE_THRESHOLD ? 'disconnected' : 'stale');
+        if (feedsResponse.ok) {
+          const payload = await feedsResponse.json();
+          updateCharts(payload.feeds || []);
+        }
+      } catch (error) {
+        console.warn('ThingSpeak telemetry poll failed:', error);
+        setStatus(false);
+        setDemoBannerVisible(false);
       }
     }
 
-    let pollingHandle = null;
     window.startSensorPolling = function () {
       if (pollingHandle !== null) return;
       tickSensors();
       pollingHandle = setInterval(tickSensors, POLL_INTERVAL_MS);
     };
+
     window.stopSensorPolling = function () {
       if (pollingHandle === null) return;
       clearInterval(pollingHandle);

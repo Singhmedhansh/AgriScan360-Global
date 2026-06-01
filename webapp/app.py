@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import sys
@@ -42,6 +42,8 @@ SEVERITY_HEATMAP_THRESHOLD = 0.5
 HOST_COMMON_NAME = "Potato"
 HOST_SCIENTIFIC_NAME = "Solanum tuberosum"
 OPENWEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+THINGSPEAK_CHANNEL_ID = 3376912
+THINGSPEAK_LAST_FEED_URL = f"https://api.thingspeak.com/channels/{THINGSPEAK_CHANNEL_ID}/feeds/last.json"
 LEAF_PIXEL_MIN_RATIO = 0.03
 LEAF_PIXEL_MIN_ABSOLUTE = 2500
 INVALID_IMAGE_MESSAGE = "Please upload a clear potato leaf image."
@@ -285,6 +287,79 @@ def get_weather(lat: float, lon: float) -> dict[str, float | str]:
         "source": "openweathermap",
         "location": payload.get("name", ""),
     }
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if np.isnan(parsed) or np.isinf(parsed):
+        return None
+    return round(parsed, 1)
+
+
+def _format_ist_timestamp(timestamp: datetime) -> str:
+    return timestamp.astimezone(IST).strftime("%Y-%m-%d • %H:%M %Z")
+
+
+def _parse_thingspeak_timestamp(created_at: Any) -> datetime | None:
+    if not isinstance(created_at, str) or not created_at.strip():
+        return None
+
+    normalized = created_at.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _fetch_thingspeak_telemetry_sync() -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    try:
+        response = requests.get(THINGSPEAK_LAST_FEED_URL, timeout=8)
+        response.raise_for_status()
+        payload = response.json() or {}
+    except Exception as exc:
+        print("ThingSpeak telemetry lookup failed:", exc)
+
+    temperature = _safe_float(payload.get("field1"))
+    humidity = _safe_float(payload.get("field2"))
+    soil_moisture = _safe_float(payload.get("field3"))
+    created_at = _parse_thingspeak_timestamp(payload.get("created_at"))
+    is_live = bool(
+        created_at is not None
+        and datetime.now(timezone.utc) - created_at <= timedelta(seconds=60)
+        and temperature is not None
+        and humidity is not None
+    )
+
+    last_updated = _format_ist_timestamp(created_at) if created_at else "--"
+    entry_id = payload.get("entry_id")
+    try:
+        records_logged = int(entry_id) if entry_id is not None and str(entry_id).strip() else None
+    except (TypeError, ValueError):
+        records_logged = None
+
+    return {
+        "temperature": temperature,
+        "humidity": humidity,
+        "soil_moisture": soil_moisture,
+        "last_updated": last_updated,
+        "is_live": is_live,
+        "device_name": "ESP8266-AgriKit" if is_live else f"ThingSpeak Channel {THINGSPEAK_CHANNEL_ID}",
+        "records_logged": records_logged,
+    }
+
+
+async def get_thingspeak_telemetry() -> dict[str, Any]:
+    return await asyncio.to_thread(_fetch_thingspeak_telemetry_sync)
 
 
 def compute_risk_score(severity_pct: float, temperature: float, humidity: float, disease_class: str | None = None) -> int:
@@ -615,6 +690,8 @@ async def predict(
         disease_info = DISEASE_INFO.get(disease, DISEASE_INFO["Healthy"])
         treatment_plan = TREATMENT_PROTOCOLS.get(disease, TREATMENT_PROTOCOLS["Healthy"])
 
+        telemetry_data = await get_thingspeak_telemetry()
+
         weather_available = False
         weather_data: dict[str, float | str] = {}
         if isinstance(lat, (float, int)) and isinstance(lon, (float, int)):
@@ -624,7 +701,25 @@ async def predict(
             except Exception as exc:
                 print("Weather lookup fallback in /predict:", exc)
 
-        if weather_available:
+        telemetry_available = (
+            telemetry_data.get("is_live") is True
+            and telemetry_data.get("temperature") is not None
+            and telemetry_data.get("humidity") is not None
+        )
+
+        if telemetry_available:
+            temperature: float | str = float(telemetry_data["temperature"])
+            humidity: float | str = float(telemetry_data["humidity"])
+            if weather_available:
+                wind_speed = float(weather_data["wind_speed"])
+                sunlight_hours = weather_data.get("sunlight_hours")
+                weather_location = weather_data.get("location", "") or "Geolocated"
+            else:
+                wind_speed = "N/A"
+                sunlight_hours = "N/A"
+                weather_location = telemetry_data.get("device_name", "ESP8266-AgriKit")
+            weather_available = True
+        elif weather_available:
             temperature: float | str = float(weather_data["temperature"])
             humidity: float | str = float(weather_data["humidity"])
             wind_speed: float | str = float(weather_data["wind_speed"])
@@ -646,7 +741,7 @@ async def predict(
             treatment_urgency = "None"
             lesion_count = 0
         else:
-            if weather_available:
+            if weather_available and isinstance(temperature, (float, int)) and isinstance(humidity, (float, int)):
                 risk_score = compute_risk_score(severity_pct, float(temperature), float(humidity), disease)
             else:
                 risk_score = compute_base_risk_score(severity_pct, confidence)
@@ -699,6 +794,7 @@ async def predict(
                 "location": weather_location,
                 "lat": lat,
                 "lon": lon,
+                "telemetry": telemetry_data,
                 "host_common": HOST_COMMON_NAME,
                 "host_scientific": HOST_SCIENTIFIC_NAME,
                 "pathogen": disease_info["pathogen"],
@@ -720,6 +816,12 @@ async def predict(
         await file.close()
         if temp_path and temp_path.exists():
             temp_path.unlink(missing_ok=True)
+
+
+@app.get("/api/telemetry")
+async def api_telemetry():
+    telemetry = await get_thingspeak_telemetry()
+    return JSONResponse(telemetry)
 
 
 @app.post("/sensor_data")
