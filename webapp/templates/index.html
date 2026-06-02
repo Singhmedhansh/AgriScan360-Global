@@ -2130,16 +2130,6 @@
 
     const chartDefs = [
       {
-        key: 'soil',
-        canvasId: 'soilMoistureChart',
-        field: 'field3',
-        lineColor: '#16a34a',
-        label: 'Live readings',
-        min: 40,
-        max: 70,
-        optimalLabel: 'Optimal range 40–70%',
-      },
-      {
         key: 'temperature',
         canvasId: 'temperatureChart',
         field: 'field1',
@@ -2158,6 +2148,16 @@
         min: 55,
         max: 85,
         optimalLabel: 'Optimal range 55–85%',
+      },
+      {
+        key: 'soil',
+        canvasId: 'soilMoistureChart',
+        field: 'field3',
+        lineColor: '#16a34a',
+        label: 'Live readings',
+        min: 40,
+        max: 70,
+        optimalLabel: 'Optimal range 40–70%',
       },
     ];
 
@@ -2279,10 +2279,10 @@
             pointHitRadius: 8,
             borderWidth: 2.5,
             tension: 0.28,
-            spanGaps: true,
+              <div class="font-semibold">Telemetry Connected</div>
             fill: false,
-          },
-          {
+                Live readings are coming from ThingSpeak ingestion on the ESP8266 NodeMCU.
+                <strong>Phase 2 deliverable:</strong> ESP8266 NodeMCU + capacitive soil moisture sensor + DHT22 temperature/humidity sensor → ThingSpeak ingestion with real field readings.
             label: 'Optimal min',
             data: minLine,
             borderColor: '#6b7280',
@@ -2290,32 +2290,32 @@
             borderDash: [5, 5],
             pointRadius: 0,
             borderWidth: 1.5,
-            tension: 0,
-            fill: false,
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#dc2626;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 1 — AIR TEMPERATURE (°C)</p>
           },
           {
-            label: 'Optimal max',
-            data: maxLine,
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 22–32°C</div>
+                <canvas id="temperatureChart" height="260"></canvas>
             borderColor: '#6b7280',
             backgroundColor: '#6b7280',
             borderDash: [5, 5],
             pointRadius: 0,
-            borderWidth: 1.5,
-            tension: 0,
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#2563eb;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 2 — AIR HUMIDITY (%)</p>
             fill: false,
           },
-        ],
-      };
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 55–85%</div>
+                <canvas id="humidityChart" height="260"></canvas>
     }
 
     function ensureChart(def, points) {
       const canvas = document.getElementById(def.canvasId);
-      if (!canvas || !window.Chart) return;
-
+                <span class="inline-block rounded-full" style="width:8px;height:8px;background:#16a34a;"></span>
+                <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 3 — SOIL MOISTURE (%)</p>
       const series = buildChartDatasets(points, def.lineColor, def.min, def.max);
       const existing = chartInstances.get(def.key);
-      if (existing) {
-        existing.data = series;
+                <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 40–70%</div>
+                <canvas id="soilMoistureChart" height="260"></canvas>
         existing.update('none');
         return;
       }
