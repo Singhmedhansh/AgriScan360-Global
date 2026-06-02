@@ -26,13 +26,18 @@
 
 // ==================== CONFIGURATION ====================
 // Wi-Fi Credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+// Keep the real values out of version control: create a local `secrets.h`
+// next to this sketch with `#define WIFI_SSID "..."` and
+// `#define WIFI_PASSWORD "..."`.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+const char* WIFI_SSID = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+#endif
 
-// Server URL (Replace with your deployed Render URL or local IP)
-// Example: "https://agriscan360.onrender.com/sensor_data"
-// Or for local testing: "http://192.168.1.100:8000/sensor_data"
-const char* serverUrl = "https://YOUR_APP_NAME.onrender.com/sensor_data";
+// Deployed ingestion endpoint for the dashboard backend.
+const char* serverUrl = "https://medhanshcoder-agriscan360.hf.space/sensor_data";
 
 // Device Identifier (to distinguish multiple sensor nodes)
 const char* deviceId = "esp_node_01";
@@ -62,9 +67,9 @@ void setup() {
   // Connect to Wi-Fi
   Serial.println();
   Serial.print("Connecting to Wi-Fi: ");
-  Serial.println(ssid);
+  Serial.println(WIFI_SSID);
   
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -138,7 +143,7 @@ void loop() {
       http.end();
     } else {
       Serial.println("WiFi Disconnected. Reconnecting...");
-      WiFi.begin(ssid, password);
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
   }
 }
