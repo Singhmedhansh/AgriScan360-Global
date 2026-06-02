@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Datasets (regenerable from outputs/dataset_report/_stage_dataset_v2.py)
+data/
+plant_dataset/
+plant_dataset_merged/
+plant_dataset_staging/
+
+# Trained models and eval artifacts (regenerable from src/train.py)
+outputs/*
+!outputs/potato_model_v2.keras
+!outputs/potato_model_v2.h5
+models/
+*.h5
+!outputs/potato_model_v2.h5
+*.ckpt
+*.pb
+
+# Runtime artifacts (regenerated per /predict call; per-request UUID names)
+webapp/static/gradcam_*.png
+webapp/static/segmented_*.png
+scripts/secrets.h
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+__MACOSX/
+
+# Logs / DBs
+*.log
+*.sqlite3
