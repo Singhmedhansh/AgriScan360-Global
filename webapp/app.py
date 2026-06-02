@@ -44,6 +44,7 @@ HOST_SCIENTIFIC_NAME = "Solanum tuberosum"
 OPENWEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
 THINGSPEAK_CHANNEL_ID = 3376912
 THINGSPEAK_LAST_FEED_URL = f"https://api.thingspeak.com/channels/{THINGSPEAK_CHANNEL_ID}/feeds/last.json"
+THINGSPEAK_FRESHNESS_WINDOW = timedelta(minutes=30)
 LEAF_PIXEL_MIN_RATIO = 0.03
 LEAF_PIXEL_MIN_ABSOLUTE = 2500
 INVALID_IMAGE_MESSAGE = "Please upload a clear potato leaf image."
@@ -335,7 +336,7 @@ def _fetch_thingspeak_telemetry_sync() -> dict[str, Any]:
     created_at = _parse_thingspeak_timestamp(payload.get("created_at"))
     is_live = bool(
         created_at is not None
-        and datetime.now(timezone.utc) - created_at <= timedelta(seconds=60)
+        and datetime.now(timezone.utc) - created_at <= THINGSPEAK_FRESHNESS_WINDOW
         and temperature is not None
         and humidity is not None
     )
