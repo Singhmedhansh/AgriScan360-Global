@@ -493,9 +493,15 @@
             </div>
             <h3 class="font-semibold text-base mt-1" style="color:var(--text-primary);">Live readings from in-field IoT device</h3>
           </div>
-          <div id="sensorStatusPill" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium flex-shrink-0" style="background:#dcfce7;color:#166534;border:1px solid #86efac;">
-            <span id="sensorStatusDot" class="inline-block rounded-full animate-pulse" style="width:6px;height:6px;background:#22c55e;"></span>
-            <span id="sensorStatusLabel">Live</span>
+          <div class="flex items-center gap-2.5 flex-shrink-0">
+            <button id="telemetryModeBtn" onclick="toggleTelemetryMode()" class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all" style="background:var(--surface); border:1px solid var(--accent-green); color:var(--accent-green); cursor:pointer;">
+              <i data-lucide="play" style="width:12px;height:12px;"></i>
+              <span>Demo Mock Mode</span>
+            </button>
+            <div id="sensorStatusPill" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium flex-shrink-0" style="background:#dcfce7;color:#166534;border:1px solid #86efac;">
+              <span id="sensorStatusDot" class="inline-block rounded-full animate-pulse" style="width:6px;height:6px;background:#22c55e;"></span>
+              <span id="sensorStatusLabel">Live</span>
+            </div>
           </div>
         </div>
 
@@ -560,15 +566,17 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <div class="flex items-center gap-2 mb-2">
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#16a34a;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 1 — SOIL MOISTURE (%)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); padding:12px;">
                 <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 40–70%</div>
-                <canvas id="soilMoistureChart" height="260"></canvas>
+                <div class="h-64 relative">
+                  <canvas id="soilMoistureChart"></canvas>
+                </div>
               </div>
             </div>
             <div>
@@ -576,9 +584,11 @@
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#dc2626;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 2 — AIR TEMPERATURE (°C)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); padding:12px;">
                 <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 22–32°C</div>
-                <canvas id="temperatureChart" height="260"></canvas>
+                <div class="h-64 relative">
+                  <canvas id="temperatureChart"></canvas>
+                </div>
               </div>
             </div>
             <div>
@@ -586,9 +596,11 @@
                 <span class="inline-block rounded-full" style="width:8px;height:8px;background:#2563eb;"></span>
                 <p class="mono text-[11px]" style="color:var(--text-muted);">FIELD 3 — AIR HUMIDITY (%)</p>
               </div>
-              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); min-height:300px; padding:12px;">
+              <div class="rounded-lg overflow-hidden" style="background:#fff; border:1px solid var(--border); padding:12px;">
                 <div class="text-[11px] mb-2" style="color:var(--text-muted);">Optimal range 55–85%</div>
-                <canvas id="humidityChart" height="260"></canvas>
+                <div class="h-64 relative">
+                  <canvas id="humidityChart"></canvas>
+                </div>
               </div>
             </div>
           </div>
@@ -2389,7 +2401,58 @@
       }
     }
 
+    let isDemoMode = true; // default to true to show clean data during wait for hardware
+
+    window.toggleTelemetryMode = function() {
+      isDemoMode = !isDemoMode;
+      const btn = document.getElementById('telemetryModeBtn');
+      if (btn) {
+        if (isDemoMode) {
+          btn.innerHTML = '<i data-lucide="play" style="width:12px;height:12px;"></i><span>Demo Mock Mode</span>';
+          btn.style.borderColor = 'var(--accent-green)';
+          btn.style.color = 'var(--accent-green)';
+        } else {
+          btn.innerHTML = '<i data-lucide="activity" style="width:12px;height:12px;"></i><span>Live API Feed</span>';
+          btn.style.borderColor = 'var(--border)';
+          btn.style.color = 'var(--text-secondary)';
+        }
+        if (window.lucide) lucide.createIcons();
+      }
+      tickSensors();
+    };
+
     async function tickSensors() {
+      if (isDemoMode) {
+        const mockTemp = 27.0 + Math.random() * 6.0;
+        const mockHum = 60.0 + Math.random() * 5.0;
+        const mockSoil = 55.0; // stable optimal placeholder value
+
+        const telemetry = {
+          temperature: mockTemp,
+          humidity: mockHum,
+          soil_moisture: mockSoil,
+          last_updated: new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST',
+          is_live: true,
+          device_name: "Demo-Mock-Device",
+          records_logged: 100
+        };
+        updateSensorCards(telemetry);
+
+        const mockFeeds = [];
+        const baseTime = Date.now() - 20 * 15000;
+        for (let i = 0; i < 20; i++) {
+          const timestamp = new Date(baseTime + i * 15000).toISOString();
+          mockFeeds.push({
+            created_at: timestamp,
+            field1: String((27.0 + Math.sin(i / 2) * 2 + Math.random() * 2).toFixed(1)),
+            field2: String((60.0 + Math.cos(i / 2) * 2 + Math.random() * 1).toFixed(1)),
+            field3: "55.0"
+          });
+        }
+        updateCharts(mockFeeds);
+        return;
+      }
+
       try {
         const [telemetryResponse, feedsResponse] = await Promise.all([
           fetch('/api/telemetry', { cache: 'no-store' }),
