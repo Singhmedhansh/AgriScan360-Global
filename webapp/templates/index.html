@@ -2274,9 +2274,11 @@
             data: dataPoints,
             borderColor: lineColor,
             backgroundColor: lineColor,
-            pointRadius: 0,
+            pointRadius: 2.5,
+            pointHoverRadius: 5,
+            pointHitRadius: 8,
             borderWidth: 2.5,
-            tension: 0.35,
+            tension: 0.28,
             spanGaps: true,
             fill: false,
           },
@@ -2326,6 +2328,11 @@
           responsive: true,
           maintainAspectRatio: false,
           animation: false,
+          layout: {
+            padding: {
+              right: 18,
+            },
+          },
           plugins: {
             legend: {
               display: false,
@@ -2341,6 +2348,7 @@
           },
           scales: {
             x: {
+              offset: true,
               grid: {
                 color: 'rgba(107,114,128,0.1)',
               },
