@@ -2,7 +2,7 @@
 title: Agriscan360
 emoji: 🌿
 colorFrom: green
-colorTo: orange
+colorTo: yellow
 sdk: docker
 pinned: false
 ---
