@@ -1,3 +1,12 @@
+---
+title: Agriscan360
+emoji: 🌿
+colorFrom: green
+colorTo: orange
+sdk: docker
+pinned: false
+---
+
 # Potato_disease: Intelligent Diagnostic & Risk Advisory System
 
 An AI-powered precision agriculture platform built to help potato farmers in India detect foliar disease early, interpret model decisions, and act quickly with weather-aware risk advisory.
