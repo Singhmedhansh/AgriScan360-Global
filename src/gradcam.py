@@ -22,6 +22,8 @@ def _find_last_conv_layer(model):
 
 def _find_conv_container(model, conv_layer):
     """If conv_layer lives inside a sub-Model, return that sub-Model; else None."""
+    if conv_layer in model.layers:
+        return None
     for layer in model.layers:
         if isinstance(layer, tf.keras.Model) and layer is not model:
             try:
