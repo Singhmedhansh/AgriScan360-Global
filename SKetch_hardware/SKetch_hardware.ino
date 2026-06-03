@@ -18,8 +18,8 @@ const uint16_t UPLOAD_INTERVAL_MS = 15000; // 15s (ThingSpeak rate limit)
 const int SOIL_PIN = A0;   // Analog pin for soil sensor
 
 // UPDATED CALIBRATION: Raw values at dry and wet ends
-const int SOIL_RAW_DRY = 650;  // Your verified baseline in open air
-const int SOIL_RAW_WET = 300;  // Adjust this once you submerge the probe!
+const int SOIL_RAW_DRY = 675;  // Buffered baseline in open air to account for drift
+const int SOIL_RAW_WET = 280;  // Buffered saturation point
 const int SOIL_RAW_MISSING_CUTOFF = 20; 
 // ---------------------------
 
