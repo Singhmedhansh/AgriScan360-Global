@@ -703,24 +703,18 @@ async def predict(
             and telemetry_data.get("humidity") is not None
         )
 
-        if telemetry_available:
-            temperature: Union[float, str] = float(telemetry_data["temperature"])
-            humidity: Union[float, str] = float(telemetry_data["humidity"])
-            if weather_available:
-                wind_speed = float(weather_data["wind_speed"])
-                sunlight_hours = weather_data.get("sunlight_hours")
-                weather_location = weather_data.get("location", "") or "Geolocated"
-            else:
-                wind_speed = "N/A"
-                sunlight_hours = "N/A"
-                weather_location = telemetry_data.get("device_name", "ESP8266-AgriKit")
-            weather_available = True
-        elif weather_available:
+        if weather_available:
             temperature: Union[float, str] = float(weather_data["temperature"])
             humidity: Union[float, str] = float(weather_data["humidity"])
             wind_speed: Union[float, str] = float(weather_data["wind_speed"])
             sunlight_hours: Optional[Union[float, str]] = weather_data.get("sunlight_hours")
             weather_location: str = weather_data.get("location", "") or "Geolocated"
+        elif telemetry_available:
+            temperature: Union[float, str] = float(telemetry_data["temperature"])
+            humidity: Union[float, str] = float(telemetry_data["humidity"])
+            wind_speed = "N/A"
+            sunlight_hours = "N/A"
+            weather_location = telemetry_data.get("device_name", "ESP8266-AgriKit")
         else:
             temperature = "N/A"
             humidity = "N/A"
