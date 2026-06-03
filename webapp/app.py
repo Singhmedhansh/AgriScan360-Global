@@ -7,7 +7,7 @@ from pathlib import Path
 import threading
 import tempfile
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Union, Dict
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -255,7 +255,7 @@ def classify_confidence_level(confidence_score: float) -> str:
     return "Very High"
 
 
-def get_weather(lat: float, lon: float) -> dict[str, float | str]:
+def get_weather(lat: float, lon: float) -> Dict[str, Union[float, str]]:
     api_key = os.getenv("OPENWEATHER_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENWEATHER_API_KEY is not configured.")
@@ -275,7 +275,7 @@ def get_weather(lat: float, lon: float) -> dict[str, float | str]:
 
     sunrise = payload.get("sys", {}).get("sunrise")
     sunset = payload.get("sys", {}).get("sunset")
-    sunlight_hours: float | None = None
+    sunlight_hours: Optional[float] = None
     if isinstance(sunrise, (int, float)) and isinstance(sunset, (int, float)) and sunset > sunrise:
         sunlight_hours = round((float(sunset) - float(sunrise)) / 3600.0, 1)
 
@@ -289,7 +289,7 @@ def get_weather(lat: float, lon: float) -> dict[str, float | str]:
     }
 
 
-def _safe_float(value: Any) -> float | None:
+def _safe_float(value: Any) -> Optional[float]:
     try:
         if value is None:
             return None
@@ -305,7 +305,7 @@ def _format_ist_timestamp(timestamp: datetime) -> str:
     return timestamp.astimezone(IST).strftime("%Y-%m-%d • %H:%M %Z")
 
 
-def _parse_thingspeak_timestamp(created_at: Any) -> datetime | None:
+def _parse_thingspeak_timestamp(created_at: Any) -> Optional[datetime]:
     if not isinstance(created_at, str) or not created_at.strip():
         return None
 
@@ -358,7 +358,7 @@ async def get_thingspeak_telemetry() -> dict[str, Any]:
     return await asyncio.to_thread(_fetch_thingspeak_telemetry_sync)
 
 
-def compute_risk_score(severity_pct: float, temperature: float, humidity: float, disease_class: str | None = None) -> int:
+def compute_risk_score(severity_pct: float, temperature: float, humidity: float, disease_class: Optional[str] = None) -> int:
     risk_score = 0
 
     if severity_pct > 60:
@@ -575,7 +575,7 @@ async def predict(
     gradcam_path = STATIC_DIR / gradcam_filename
     segmented_path = STATIC_DIR / segmented_filename
 
-    temp_path: Path | None = None
+    temp_path: Optional[Path] = None
     try:
         loaded_model = get_or_load_model()
         if loaded_model is None:
@@ -605,7 +605,7 @@ async def predict(
         leaf_pixels = int(np.sum(leaf_mask > 0))
         min_leaf_pixels = max(LEAF_PIXEL_MIN_ABSOLUTE, int(leaf_mask.size * LEAF_PIXEL_MIN_RATIO))
 
-        quality_warning: str | None = None
+        quality_warning: Optional[str] = None
         use_segmented_leaf = USE_SEGMENTATION and leaf_pixels >= min_leaf_pixels
         if leaf_pixels < min_leaf_pixels:
             # Segmentation can under-detect non-uniform green leaves; continue with original image.
@@ -689,7 +689,7 @@ async def predict(
         telemetry_data = await get_thingspeak_telemetry()
 
         weather_available = False
-        weather_data: dict[str, float | str] = {}
+        weather_data: Dict[str, Union[float, str]] = {}
         if isinstance(lat, (float, int)) and isinstance(lon, (float, int)):
             try:
                 weather_data = get_weather(float(lat), float(lon))
@@ -704,8 +704,8 @@ async def predict(
         )
 
         if telemetry_available:
-            temperature: float | str = float(telemetry_data["temperature"])
-            humidity: float | str = float(telemetry_data["humidity"])
+            temperature: Union[float, str] = float(telemetry_data["temperature"])
+            humidity: Union[float, str] = float(telemetry_data["humidity"])
             if weather_available:
                 wind_speed = float(weather_data["wind_speed"])
                 sunlight_hours = weather_data.get("sunlight_hours")
@@ -716,10 +716,10 @@ async def predict(
                 weather_location = telemetry_data.get("device_name", "ESP8266-AgriKit")
             weather_available = True
         elif weather_available:
-            temperature: float | str = float(weather_data["temperature"])
-            humidity: float | str = float(weather_data["humidity"])
-            wind_speed: float | str = float(weather_data["wind_speed"])
-            sunlight_hours: float | str | None = weather_data.get("sunlight_hours")
+            temperature: Union[float, str] = float(weather_data["temperature"])
+            humidity: Union[float, str] = float(weather_data["humidity"])
+            wind_speed: Union[float, str] = float(weather_data["wind_speed"])
+            sunlight_hours: Optional[Union[float, str]] = weather_data.get("sunlight_hours")
             weather_location: str = weather_data.get("location", "") or "Geolocated"
         else:
             temperature = "N/A"

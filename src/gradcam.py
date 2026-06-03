@@ -32,31 +32,34 @@ def _find_conv_container(model, conv_layer):
     return None
 
 
-def _build_grad_model(model, last_conv_layer):
-    """Build a Functional model that returns (conv_activation, predictions)
-    from a fresh input, robust to nested EfficientNet backbones reloaded from .h5."""
+def get_post_conv_predictions(conv_outputs, model, last_conv_layer):
+    """Sequentially apply remaining layers after last_conv_layer to compute predictions."""
     container = _find_conv_container(model, last_conv_layer)
-    if container is None:
-        return tf.keras.models.Model(
-            inputs=model.inputs,
-            outputs=[last_conv_layer.output, model.output],
-        )
-    extractor = tf.keras.models.Model(
-        container.input,
-        [container.output, last_conv_layer.output],
-    )
-    layers_list = list(model.layers)
-    container_idx = layers_list.index(container)
-    head_layers = [
-        layer for layer in layers_list[container_idx + 1:]
-        if not isinstance(layer, tf.keras.layers.InputLayer)
-    ]
-    new_input = tf.keras.Input(shape=model.input_shape[1:], name="gradcam_input")
-    backbone_out, conv_activation = extractor(new_input)
-    x = backbone_out
-    for layer in head_layers:
-        x = layer(x)
-    return tf.keras.models.Model(new_input, [conv_activation, x])
+    x = conv_outputs
+    if container is not None:
+        container_layers = list(container.layers)
+        idx = container_layers.index(last_conv_layer)
+        for layer in container_layers[idx + 1:]:
+            x = layer(x)
+        
+        # Identify head layers (layers in model not in container and not container itself)
+        container_layer_names = set(l.name for l in container.layers)
+        head_layers = [
+            l for l in model.layers
+            if l.name != container.name and l.name not in container_layer_names and not isinstance(l, tf.keras.layers.InputLayer)
+        ]
+        # Maintain topological order
+        main_layers = list(model.layers)
+        head_layers.sort(key=lambda l: main_layers.index(l))
+        
+        for layer in head_layers:
+            x = layer(x)
+    else:
+        main_layers = list(model.layers)
+        idx = main_layers.index(last_conv_layer)
+        for layer in main_layers[idx + 1:]:
+            x = layer(x)
+    return x
 
 
 def generate_gradcam(model, img_array):
@@ -66,15 +69,20 @@ def generate_gradcam(model, img_array):
     target_width = int(img_tensor.shape[2])
     try:
         last_conv_layer = _find_last_conv_layer(model)
-        grad_model = _build_grad_model(model, last_conv_layer)
+        
+        # Build model to get conv outputs
+        conv_model = tf.keras.models.Model(inputs=model.inputs, outputs=last_conv_layer.output)
+        conv_outputs = conv_model(img_tensor, training=False)
 
         with tf.GradientTape() as tape:
-            conv_outputs, predictions = grad_model(img_tensor, training=False)
-            pred_index = tf.argmax(predictions[0])
+            tape.watch(conv_outputs)
+            predictions = get_post_conv_predictions(conv_outputs, model, last_conv_layer)
+            pred_index = np.argmax(predictions[0].numpy())
             class_score = predictions[:, pred_index]
 
         grads = tape.gradient(class_score, conv_outputs)
         if grads is None:
+            print("Warning: Grad-CAM gradient calculation returned None")
             return np.zeros((target_height, target_width), dtype=np.float32)
 
         grads_2 = grads * grads
@@ -99,7 +107,7 @@ def generate_gradcam(model, img_array):
             (target_height, target_width),
         )
         return tf.squeeze(heatmap).numpy()
-    except (ValueError, RuntimeError) as e:
+    except Exception as e:
         print(f"Grad-CAM failed, returning flat heatmap: {e}")
         return np.zeros((target_height, target_width), dtype=np.float32)
 
