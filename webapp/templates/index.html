@@ -2491,13 +2491,36 @@
     };
   })();
 
-  document.addEventListener('DOMContentLoaded', function() {
+  async function fetchWeatherForUserLocation() {
+    if (Number.isFinite(window.userLat) && Number.isFinite(window.userLon)) {
+      try {
+        const response = await fetch(`/weather?lat=${window.userLat}&lon=${window.userLon}`);
+        if (response.ok) {
+          const result = await response.json();
+          updateEnvironmentalPanel(result);
+          const locationLabelEl = getEl('locationLabel');
+          if (locationLabelEl) {
+            const city = result.location && String(result.location).trim();
+            const coordPart = ` (${window.userLat.toFixed(3)}, ${window.userLon.toFixed(3)})`;
+            locationLabelEl.textContent = `${city || 'Geolocated'}${coordPart}`;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch initial weather:", e);
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', async function() {
     console.log('AgriScan UI loaded');
     if (window.lucide) {
       lucide.createIcons();
     }
     resetResultFields();
-    requestUserLocation();
+    const got = await requestUserLocation();
+    if (got) {
+      await fetchWeatherForUserLocation();
+    }
   });
 </script>
 
