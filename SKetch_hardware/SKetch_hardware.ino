@@ -1,5 +1,5 @@
 // ESP8266 ThingSpeak uploader for DHT22 + soil sensor
-// Replace the placeholders below before uploading.
+// Integrated for AgriScan Node NodeMCU
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -11,15 +11,16 @@ const char* WIFI_PASS = "Medhansh";
 const char* THINGSPEAK_API_KEY = "ISU09XJXVXHQLRPH"; // write API key
 const char* DEVICE_NAME = "ESP8266-AgriKit";
 
-#define DHTPIN D4          // DHT22 sensor
-#define DHTTYPE DHT22      // DHT22 sensor
+#define DHTPIN 2           // GPIO2 maps perfectly to your hardware D4 connection
+#define DHTTYPE DHT22      // DHT22 sensor module
 const uint16_t UPLOAD_INTERVAL_MS = 15000; // 15s (ThingSpeak rate limit)
 
-const int SOIL_PIN = A0;   // analog pin for soil sensor
-// Calibrate these to your sensor: raw value at dry and wet ends
-const int SOIL_RAW_DRY = 800;
-const int SOIL_RAW_WET = 300;
-const int SOIL_RAW_MISSING_CUTOFF = 20;
+const int SOIL_PIN = A0;   // Analog pin for soil sensor
+
+// UPDATED CALIBRATION: Raw values at dry and wet ends
+const int SOIL_RAW_DRY = 650;  // Your verified baseline in open air
+const int SOIL_RAW_WET = 300;  // Adjust this once you submerge the probe!
+const int SOIL_RAW_MISSING_CUTOFF = 20; 
 // ---------------------------
 
 DHT dht(DHTPIN, DHTTYPE);
@@ -63,7 +64,10 @@ String urlEncode(String s) {
 
 void setup() {
   Serial.begin(115200);
-  delay(50);
+  delay(500); // Give serial connection time to stabilize
+  Serial.println("\n=====================================");
+  Serial.println("     AgriScan ThingSpeak Node        ");
+  Serial.println("=====================================");
   dht.begin();
   connectWiFi();
 }
@@ -87,15 +91,15 @@ int readSoilPercent(int &rawOut) {
   // If reading is out of expected ADC range, treat as missing (-1)
   if (raw < 0 || raw > 1023) return -1;
 
-  // Many disconnected or miswired soil sensors read near zero. Treat that as
-  // missing instead of mapping it to 100% moisture.
+  // Filter out immediate grounding issues
   if (raw <= SOIL_RAW_MISSING_CUTOFF) return -1;
 
   int dry = max(SOIL_RAW_DRY, SOIL_RAW_WET);
   int wet = min(SOIL_RAW_DRY, SOIL_RAW_WET);
   raw = constrain(raw, wet, dry);
 
-  // Higher moisture should map to a higher percentage.
+  // High raw value = low moisture (dry)
+  // Low raw value = high moisture (wet)
   int percent = map(raw, dry, wet, 0, 100);
   return constrain(percent, 0, 100);
 }
@@ -116,10 +120,10 @@ void sendToThingSpeak(float tempC, float hum, int soilPercent, bool soilPresent)
   if (soilPresent) {
     url += "&field3=" + String(soilPercent);
   }
-  // optional status/device name
+  // Device status tagging
   url += "&status=" + urlEncode(String("device: ") + DEVICE_NAME);
 
-  Serial.println("Uploading to ThingSpeak:");
+  Serial.println("\nUploading to ThingSpeak:");
   Serial.println(url);
   WiFiClient client;
   HTTPClient http;
@@ -127,7 +131,7 @@ void sendToThingSpeak(float tempC, float hum, int soilPercent, bool soilPresent)
   int httpCode = http.GET();
   if (httpCode > 0) {
     String payload = http.getString();
-    Serial.printf("ThingSpeak returned: %d / %s\n", httpCode, payload.c_str());
+    Serial.printf("ThingSpeak response: %d / entry ID: %s\n", httpCode, payload.c_str());
   } else {
     Serial.printf("HTTP error: %d\n", httpCode);
   }
@@ -145,20 +149,21 @@ void loop() {
     int soilPercent = readSoilPercent(soilRaw);
     bool soilPresent = (soilPercent >= 0);
 
+    Serial.println("\n--- Current Scan ---");
     Serial.print("Temp(C): ");
     if (isnan(tempC)) Serial.print("N/A"); else Serial.print(tempC, 2);
-    Serial.print("  Humidity(%): ");
+    Serial.print("  |  Humidity(%): ");
     if (isnan(hum)) Serial.print("N/A"); else Serial.print(hum, 2);
-    Serial.print("  Soil(%): ");
+    Serial.print("  |  Soil(%): ");
     if (soilPresent) Serial.print(soilPercent); else Serial.print("N/A");
-    Serial.print("  SoilRaw: ");
+    Serial.print("  (Raw: ");
     Serial.print(soilRaw);
-    Serial.println();
+    Serial.println(")");
 
     sendToThingSpeak(tempC, hum, soilPercent, soilPresent);
   }
 
-  // keep WiFi alive; reconnect if dropped
+  // Auto-reconnect if hotspot drops out
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
   }

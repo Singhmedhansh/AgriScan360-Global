@@ -878,6 +878,11 @@
             <p id="sunlightHoursValue" class="mono text-base font-medium" style="color:var(--text-primary);">6.2 hrs</p>
             <p class="text-xs" style="color:var(--text-muted);">Sunlight</p>
           </div>
+          <div class="rounded-lg p-3 text-center col-span-2" style="background:var(--surface-2); border:1px solid var(--border);">
+            <i data-lucide="droplet" style="width:16px;height:16px;color:var(--accent-green);margin:0 auto 4px;"></i>
+            <p id="soilMoistureValue" class="mono text-base font-medium" style="color:var(--text-primary);">--%</p>
+            <p class="text-xs" style="color:var(--text-muted);">Soil Moisture</p>
+          </div>
         </div>
         <div class="mt-3 flex items-center gap-1.5 text-xs" style="color:var(--text-muted);">
           <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
@@ -1548,11 +1553,13 @@
     const humidity = Number(data.humidity);
     const windSpeed = Number(data.wind_speed);
     const sunlight = Number(data.sunlight_hours);
+    const soilMoisture = data.telemetry && data.telemetry.soil_moisture !== null ? Number(data.telemetry.soil_moisture) : Number.NaN;
 
     safeSetText('temperatureValue', Number.isFinite(temperature) ? `${temperature}°C` : '--');
     safeSetText('humidityValue', Number.isFinite(humidity) ? `${humidity}%` : '--');
     safeSetText('windSpeedValue', Number.isFinite(windSpeed) ? `${windSpeed} km/h` : '--');
     safeSetText('sunlightHoursValue', Number.isFinite(sunlight) ? `${sunlight} hrs` : '--');
+    safeSetText('soilMoistureValue', Number.isFinite(soilMoisture) ? `${soilMoisture.toFixed(1)}%` : '--%');
   }
 
   function hasUserLocation() {
