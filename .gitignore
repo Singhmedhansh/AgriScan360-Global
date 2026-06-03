@@ -42,3 +42,4 @@ __MACOSX/
 # Logs / DBs
 *.log
 *.sqlite3
+.venv_39/
