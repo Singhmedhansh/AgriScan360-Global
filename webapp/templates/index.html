@@ -540,6 +540,9 @@
             </div>
           </div>
 
+          <!-- Dynamic out-of-range alerts rendered by updateSensorCards() -->
+          <div id="sensorAlertsContainer" class="flex flex-col gap-2 mt-3"></div>
+
           <p id="sensorEmptyState" class="text-xs mt-3 hidden" style="color:var(--text-muted);">No sensor data yet — start the simulator or connect the field device.</p>
 
           <div id="sensorMetaStrip" class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style="color:var(--text-muted);">
@@ -2104,7 +2107,7 @@
           window.userLon = null;
           resolve(false);
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 300000 }
       );
     });
   }
@@ -2384,6 +2387,9 @@
     const spreadProbabilityBar = getEl('spreadProbabilityBar');
     if (spreadProbabilityBar) {
       spreadProbabilityBar.style.width = Number.isFinite(spreadProbability) ? `${Math.max(0, Math.min(100, spreadProbability))}%` : '0%';
+      if (spreadProbability < 30) spreadProbabilityBar.style.background = '#22c55e'; // green
+      else if (spreadProbability < 60) spreadProbabilityBar.style.background = '#eab308'; // yellow
+      else spreadProbabilityBar.style.background = '#ef4444'; // red
     }
 
     const yieldImpact = result.yield_impact || '--';
@@ -2391,19 +2397,26 @@
     const yieldImpactBar = getEl('yieldImpactBar');
     if (yieldImpactBar) {
       let width = 0;
-      if (yieldImpact === '0-5%') width = 5;
-      else if (yieldImpact === '5-15%') width = 15;
-      else if (yieldImpact === '15-35%') width = 35;
-      else if (yieldImpact === '35-60%') width = 60;
+      let color = '#22c55e';
+      if (yieldImpact === '0-5%') { width = 5; color = '#22c55e'; }
+      else if (yieldImpact === '5-15%') { width = 15; color = '#eab308'; }
+      else if (yieldImpact === '15-35%') { width = 35; color = '#f97316'; }
+      else if (yieldImpact === '35-60%') { width = 60; color = '#ef4444'; }
       yieldImpactBar.style.width = `${width}%`;
+      yieldImpactBar.style.background = color;
     }
 
     safeSetText('treatmentUrgency', result.treatment_urgency || '--');
     const treatmentUrgencyBar = getEl('treatmentUrgencyBar');
     if (treatmentUrgencyBar) {
       const urgency = result.treatment_urgency || '';
-      const width = urgency === 'High' ? 85 : urgency === 'Medium' ? 55 : urgency === 'Low' ? 25 : 0;
+      let width = 0;
+      let color = '#22c55e';
+      if (urgency === 'High') { width = 85; color = '#ef4444'; }
+      else if (urgency === 'Medium') { width = 55; color = '#eab308'; }
+      else if (urgency === 'Low') { width = 25; color = '#22c55e'; }
       treatmentUrgencyBar.style.width = `${width}%`;
+      treatmentUrgencyBar.style.background = color;
     }
 
     updateEnvironmentalPanel(result);
@@ -2798,6 +2811,140 @@
 
       setStatus(isLive);
       setDemoBannerVisible(isLive);
+
+      // ── Out-of-range advisory alerts ──────────────────────────────────────
+      const alertsContainer = document.getElementById('sensorAlertsContainer');
+      if (!alertsContainer) return;
+
+      const alerts = [];
+
+      // Temperature thresholds: optimal 22–32 °C
+      if (Number.isFinite(temperature)) {
+        if (temperature > 32) {
+          const severity = temperature > 38 ? 'CRITICAL' : 'HIGH';
+          const color = temperature > 38 ? { bg:'#fef2f2', border:'#fca5a5', text:'#991b1b', badge:'#dc2626' } : { bg:'#fff7ed', border:'#fdba74', text:'#9a3412', badge:'#ea580c' };
+          alerts.push({
+            icon: '🌡️',
+            label: `${severity} ALERT — TEMPERATURE`,
+            title: `Air temperature too high (${temperature.toFixed(1)}°C)`,
+            solutions: [
+              'Install shade nets (30–50% shade factor) over the crop canopy',
+              'Increase irrigation frequency to cool the root zone via evapotranspiration',
+              'Apply reflective mulch on soil surface to reduce heat absorption',
+              'Schedule field operations for early morning (before 9 AM) or evening',
+              'Avoid nitrogen-heavy fertilization during heat stress periods',
+            ],
+            ...color,
+          });
+        } else if (temperature < 22) {
+          const color = temperature < 10
+            ? { bg:'#eff6ff', border:'#93c5fd', text:'#1e3a5f', badge:'#2563eb' }
+            : { bg:'#f0f9ff', border:'#7dd3fc', text:'#075985', badge:'#0284c7' };
+          alerts.push({
+            icon: '🥶',
+            label: 'LOW ALERT — TEMPERATURE',
+            title: `Air temperature too low (${temperature.toFixed(1)}°C)`,
+            solutions: [
+              'Deploy row cover or frost blankets overnight to trap ground heat',
+              'Use plastic mulch to retain soil warmth during cold spells',
+              'Delay irrigation to early afternoon when air is warmer',
+              'Monitor for frost damage on leaf margins — remove affected tissue',
+              'Consider wind-break installation on the northern side of the field',
+            ],
+            ...color,
+          });
+        }
+      }
+
+      // Humidity thresholds: optimal 55–85 %
+      if (Number.isFinite(humidity)) {
+        if (humidity > 85) {
+          alerts.push({
+            icon: '💧',
+            label: 'HIGH ALERT — HUMIDITY',
+            title: `Air humidity critically high (${humidity.toFixed(1)}%) — Fungal risk elevated`,
+            solutions: [
+              'Improve canopy ventilation by pruning dense foliage growth',
+              'Reduce or halt overhead irrigation; switch to drip/root-zone irrigation',
+              'Apply preventive fungicide (e.g., Mancozeb, Chlorothalonil) immediately',
+              'Space plants adequately; remove weeds that trap moisture',
+              'Increase row spacing on replant to allow airflow in next crop cycle',
+            ],
+            bg: '#fdf4ff', border: '#d8b4fe', text: '#581c87', badge: '#9333ea',
+          });
+        } else if (humidity < 55) {
+          alerts.push({
+            icon: '🏜️',
+            label: 'LOW ALERT — HUMIDITY',
+            title: `Air humidity too low (${humidity.toFixed(1)}%) — Moisture stress risk`,
+            solutions: [
+              'Increase irrigation frequency, especially during afternoon hours',
+              'Apply organic mulch (straw or wood chips) to conserve soil moisture',
+              'Use micro-sprinklers to locally raise canopy microclimate humidity',
+              'Avoid tillage during dry spells to prevent additional moisture loss',
+              'Consider installing a shade structure to reduce evapotranspiration',
+            ],
+            bg: '#fefce8', border: '#fde047', text: '#713f12', badge: '#ca8a04',
+          });
+        }
+      }
+
+      // Soil moisture thresholds: optimal 40–70 %
+      if (Number.isFinite(soil)) {
+        if (soil > 70) {
+          alerts.push({
+            icon: '🌊',
+            label: 'HIGH ALERT — SOIL MOISTURE',
+            title: `Soil moisture critically high (${soil.toFixed(1)}%) — Waterlogging risk`,
+            solutions: [
+              'Immediately reduce or suspend all irrigation cycles',
+              'Open drainage channels or install tile drainage to remove excess water',
+              'Apply a light layer of dry compost to absorb surface moisture',
+              'Aerate soil with a fork around plant base to improve drainage',
+              'Monitor roots for early signs of root rot — remove affected plants',
+            ],
+            bg: '#f0f9ff', border: '#7dd3fc', text: '#075985', badge: '#0284c7',
+          });
+        } else if (soil < 40) {
+          const severity = soil < 20 ? 'CRITICAL' : 'HIGH';
+          const color = soil < 20 ? { bg:'#fef2f2', border:'#fca5a5', text:'#991b1b', badge:'#dc2626' } : { bg:'#fff7ed', border:'#fdba74', text:'#9a3412', badge:'#ea580c' };
+          alerts.push({
+            icon: '🌵',
+            label: `${severity} ALERT — SOIL MOISTURE`,
+            title: `Soil moisture too low (${soil.toFixed(1)}%) — Drought stress risk`,
+            solutions: [
+              'Trigger an immediate irrigation cycle to bring levels to 50–60%',
+              'Switch to drip irrigation to maximize water-use efficiency',
+              'Apply a 5–8 cm layer of organic mulch around plant base to retain moisture',
+              'Schedule irrigation for early morning to minimize evaporation losses',
+              'Check and clean soil moisture sensors for calibration drift',
+            ],
+            ...color,
+          });
+        }
+      }
+
+      // Render alerts
+      alertsContainer.innerHTML = alerts.map(alert => `
+        <div class="rounded-lg border overflow-hidden" style="background:${alert.bg}; border-color:${alert.border};">
+          <div class="flex items-center gap-2 px-4 py-2.5" style="border-bottom:1px solid ${alert.border}; background:${alert.border}20;">
+            <span style="font-size:15px;">${alert.icon}</span>
+            <span class="mono text-[11px] font-semibold tracking-wider" style="color:${alert.badge};">${alert.label}</span>
+            <span class="ml-auto flex items-center justify-center rounded-full px-2 py-0.5 mono text-[10px] font-bold" style="background:${alert.badge}; color:#fff;">OUT OF RANGE</span>
+          </div>
+          <div class="px-4 py-3">
+            <p class="text-sm font-semibold mb-2" style="color:${alert.text};">${alert.title}</p>
+            <p class="text-[11px] font-semibold mb-1.5 uppercase tracking-wide" style="color:${alert.badge};">Recommended Actions</p>
+            <ul class="flex flex-col gap-1">
+              ${alert.solutions.map((s, i) => `
+                <li class="flex items-start gap-2 text-xs" style="color:${alert.text};">
+                  <span class="mt-0.5 flex-shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold" style="width:15px;height:15px;background:${alert.badge};color:#fff;">${i + 1}</span>
+                  <span>${s}</span>
+                </li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `).join('');
     }
 
     function buildChartDatasets(points, lineColor, minValue, maxValue) {

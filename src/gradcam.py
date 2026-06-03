@@ -34,36 +34,6 @@ def _find_conv_container(model, conv_layer):
     return None
 
 
-def get_post_conv_predictions(conv_outputs, model, last_conv_layer):
-    """Sequentially apply remaining layers after last_conv_layer to compute predictions."""
-    container = _find_conv_container(model, last_conv_layer)
-    x = conv_outputs
-    if container is not None:
-        container_layers = list(container.layers)
-        idx = container_layers.index(last_conv_layer)
-        for layer in container_layers[idx + 1:]:
-            x = layer(x)
-        
-        # Identify head layers (layers in model not in container and not container itself)
-        container_layer_names = set(l.name for l in container.layers)
-        head_layers = [
-            l for l in model.layers
-            if l.name != container.name and l.name not in container_layer_names and not isinstance(l, tf.keras.layers.InputLayer)
-        ]
-        # Maintain topological order
-        main_layers = list(model.layers)
-        head_layers.sort(key=lambda l: main_layers.index(l))
-        
-        for layer in head_layers:
-            x = layer(x)
-    else:
-        main_layers = list(model.layers)
-        idx = main_layers.index(last_conv_layer)
-        for layer in main_layers[idx + 1:]:
-            x = layer(x)
-    return x
-
-
 def generate_gradcam(model, img_array):
     """Grad-CAM++ with a flat-zero fallback on any failure."""
     img_tensor = tf.convert_to_tensor(img_array, dtype=tf.float32)
@@ -72,14 +42,15 @@ def generate_gradcam(model, img_array):
     try:
         last_conv_layer = _find_last_conv_layer(model)
         
-        # Build model to get conv outputs
-        conv_model = tf.keras.models.Model(inputs=model.inputs, outputs=last_conv_layer.output)
-        conv_outputs = conv_model(img_tensor, training=False)
+        # Build a gradient model that returns both the conv outputs and the final predictions
+        grad_model = tf.keras.models.Model(
+            [model.inputs],
+            [last_conv_layer.output, model.output]
+        )
 
         with tf.GradientTape() as tape:
-            tape.watch(conv_outputs)
-            predictions = get_post_conv_predictions(conv_outputs, model, last_conv_layer)
-            pred_index = np.argmax(predictions[0].numpy())
+            conv_outputs, predictions = grad_model(img_tensor)
+            pred_index = tf.argmax(predictions[0])
             class_score = predictions[:, pred_index]
 
         grads = tape.gradient(class_score, conv_outputs)
