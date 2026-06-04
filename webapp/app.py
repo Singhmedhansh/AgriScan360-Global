@@ -26,7 +26,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from src.constants import CLASS_NAMES, NUM_CLASSES
-from src.segmentation import segment_leaf as segment_leaf_with_mask
+from src.segmentation import segment_leaf as segment_leaf_with_mask, is_plant_image
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEBAPP_DIR = BASE_DIR / "webapp"
@@ -598,6 +598,20 @@ async def predict(
                 {
                     "status": "invalid_image",
                     "message": INVALID_IMAGE_MESSAGE,
+                }
+            )
+
+        # ── Hard gate: reject non-plant images before hitting the model ──────
+        is_plant, reject_reason = is_plant_image(uploaded_img)
+        if not is_plant:
+            return JSONResponse(
+                {
+                    "status": "not_a_plant",
+                    "message": (
+                        "No plant or leaf detected in the uploaded image. "
+                        "Please upload a clear, close-up photo of a plant leaf. "
+                        f"({reject_reason})"
+                    ),
                 }
             )
 

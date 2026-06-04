@@ -2642,6 +2642,15 @@
         return;
       }
 
+      if (result?.status === 'not_a_plant') {
+        await completePipelineSteps();
+        resetResultFields();
+        showValidationWarning(
+          '🌿 No plant or leaf detected in this image. Please upload a close-up, well-lit photo of a plant leaf. Non-plant images (people, objects, scenery) cannot be diagnosed.'
+        );
+        return;
+      }
+
       if (!response.ok || !result) {
         throw new Error(result?.detail || result?.message || 'Backend returned a non-OK response.');
       }
